@@ -1,41 +1,88 @@
 # Ajazz AJ139 V2 Control Software
 
-This is an unofficial, on-device control software for the [Ajazz AJ139 V2](https://139v2mc.yjx2012.com/) wireless mouse, created to eliminate the dependency on web-based wrappers and allow system tray background monitoring.
+[日本語版 README](./README_JA.md)
 
-![System Tray Battery Indicator](https://img.shields.io/badge/System%20Tray-Battery%20Indicator-brightgreen)
+Unofficial on-device control software for the [Ajazz AJ139 V2](https://139v2mc.yjx2012.com/) wireless mouse.
+
+This project replaces the vendor web UI with a local Python application built around `hidapi` and Tkinter. It supports direct device configuration, tray battery monitoring, key remapping, and macro management without depending on a browser wrapper.
 
 ## Features
-- **Cross-platform UI Options**: Modify settings directly from Python cleanly and locally.
-- **System Tray Agent**: Running in the background with a system tray icon dynamically showing your real-time mouse battery percentage natively.
-- **Full Customizability**:
-  - DPI configuration (up to 6 levels, individually adjustable per specific axis/color)
-  - Polling rate (125 / 250 / 500 / 1000 Hz)
-  - Key Debounce Time
-  - Lift Off Distance (LOD: 1mm or 2mm)
-  - Customizable LED Sleeper and Lighting modes.
-- **i18n Language Settings**: The application supports both English (Default) and Japanese locally.
-- **Integrated Debugger**: Intercepts Hex raw communication logs between your computer and the mouse natively.
+- Status page with firmware, online state, and battery information
+- Performance settings
+- DPI levels
+- Polling rate
+- Debounce time
+- Lift-off distance
+- Lighting / sleep settings
+- Key Mapping tab for all 8 on-device button slots
+- Mouse presets, media presets, normal keyboard keys, and modifier combos
+- Extended function key support up to `F24`
+- Macro tab with 32 macro slots
+- On-device macro read / write / reset
+- Macro recording and manual event insertion
+- Inline macro editing for `Name`, `Action`, and `Delay`
+- English / Japanese UI
+- Raw HID debug log output
+- System tray battery indicator
 
-## Prerequisites
+## Requirements
+- Python 3.8+
+- Windows recommended
+- Python packages:
+  - `hidapi`
+  - `Pillow`
+  - `pystray`
+  - `pyinstaller` for building
 
-- **Python 3.8+**
-- Packages used: `hidapi`, `pystray`, `Pillow`
+Install dependencies with:
 
-## Installation & Build Instructions
+```powershell
+python -m pip install -r requirements.txt
+```
 
-If you just want the executable, you can easily build it using the included batch file.
+## Running
 
-1. **For Executable Build (Windows)**:
-   Just run `build.bat`. It will automatically install all needed libraries and invoke PyInstaller to create a portable `.exe` file inside `dist/`. No further installation or python dependency is required to run the `main.exe` result!
+```powershell
+python main.py
+```
 
-2. **For Manual Python Run**:
-   ```bash
-   pip install -r requirements.txt
-   python main.py
-   ```
+If `pystray` or another package appears missing, make sure you installed dependencies with the same Python you use to launch the app:
 
-## Usage
-1. Connect your Ajazz AJ139 V2 matching USB Dongle or Cable.
-2. Launch `main.py` or the built `main.exe`.
-3. Press **[Refresh Status]** to fetch real firmware / device information.
-4. **Closing the Window**: Simply clicking "X" gracefully minimizes the program to the System Tray. Right click on the tray icon to `Open Settings` or firmly `Exit` the tracker.
+```powershell
+python -m pip install -r requirements.txt
+python main.py
+```
+
+## Building
+
+Use the included batch file:
+
+```powershell
+build.bat
+```
+
+`build.bat` installs requirements into the active Python environment and then runs:
+
+```powershell
+python -m PyInstaller --noconfirm --onefile --windowed main.py
+```
+
+## Usage Notes
+- Closing the main window hides the app to the system tray.
+- `Refresh Status` loads the basic device state first.
+- Macro data is loaded lazily when the `Macro` tab is opened.
+- Heavy device operations run in the background so the UI stays responsive.
+- The `Macro` tab shows a status message while loading, writing, or resetting.
+- Some macro read chunks may come back empty on this device; the app handles that without blocking for long timeouts.
+
+## Known Limitations
+- Macro storage behavior is vendor-specific and was reverse engineered from the web app.
+- Devices with empty or sparse macro pages may still load more slowly than normal settings.
+- Full validation still depends on real hardware testing.
+
+## Project Files
+- [main.py](/D:/学校/python/AjazzAJ139V2/main.py): entry point
+- [ui_app.py](/D:/学校/python/AjazzAJ139V2/ui_app.py): Tkinter UI and background task handling
+- [ajazz_mouse.py](/D:/学校/python/AjazzAJ139V2/ajazz_mouse.py): HID protocol layer
+- [build.bat](/D:/学校/python/AjazzAJ139V2/build.bat): Windows build helper
+- [requirements.txt](/D:/学校/python/AjazzAJ139V2/requirements.txt): Python dependencies
