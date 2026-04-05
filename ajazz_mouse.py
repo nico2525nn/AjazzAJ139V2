@@ -1,4 +1,6 @@
 import hid
+import time
+import threading
 
 class AjazzMouse:
     VENDOR_IDS = [0xA8A4, 0xA8A5]  # 43172, 43173
@@ -9,59 +11,95 @@ class AjazzMouse:
     def __init__(self, log_callback=None):
         self.device = None
         self.log_callback = log_callback
+        self.lock = threading.RLock()
 
     def _log(self, prefix, data):
         """16進数にフォーマットしてコールバックに渡す"""
         if self.log_callback:
-            hex_str = " ".join([f"{b:02X}" for b in data])
-            self.log_callback(f"{prefix}: {hex_str}")
+            if isinstance(data, list) or isinstance(data, bytes):
+                hex_str = " ".join([f"{b:02X}" for b in data])
+                self.log_callback(f"{prefix}: {hex_str}")
+            else:
+                self.log_callback(f"{prefix}: {data}")
 
     def connect(self):
         """マウスを検索して接続する"""
-        for d in hid.enumerate():
-            if d['vendor_id'] in self.VENDOR_IDS and d['product_id'] == self.PRODUCT_ID:
-                if d['usage_page'] == self.USAGE_PAGE and d['usage'] == self.USAGE:
-                    self.device = hid.device()
-                    self.device.open_path(d['path'])
-                    self.device.set_nonblocking(False)
-                    return True
-        return False
+        with self.lock:
+            for d in hid.enumerate():
+                if d['vendor_id'] in self.VENDOR_IDS and d['product_id'] == self.PRODUCT_ID:
+                    if d['usage_page'] == self.USAGE_PAGE and d['usage'] == self.USAGE:
+                        self.device = hid.device()
+                        self.device.open_path(d['path'])
+                        self.device.set_nonblocking(False)
+                        return True
+            return False
 
     def close(self):
         """デバイスのクローズ"""
-        if self.device:
-            self.device.close()
-            self.device = None
+        with self.lock:
+            if self.device:
+                self.device.close()
+                self.device = None
 
     def _send_command(self, payload):
-        """65バイト(Report ID込)のコマンドを送信し、結果を受け取る"""
-        if not self.device:
-            raise ConnectionError("デバイスが接続されていません")
+        """65バイト(Report ID込)のコマンドを送信し、マッチする結果を受け取るまで待つ"""
+        with self.lock:
+            if not self.device:
+                raise ConnectionError("デバイスが接続されていません")
 
-        buffer = [0] * 65
-        for i in range(len(payload)):
-            buffer[i] = payload[i]
-        
-        self._log("SEND", buffer)
-        self.device.write(buffer)
-        
-        resp = self.device.read(65, timeout_ms=1000)
-        resp_list = list(resp)
-        self._log("RECV", resp_list)
-        
-        # JSのパース処理とIndexを一致させるため、レスポンス先頭のReport ID(0)を除去して64バイト配列にします
-        if len(resp_list) == 65 and resp_list[0] == 0:
-            return resp_list[1:]
-        elif len(resp_list) == 64:
-            return resp_list
+            # 1. 読み取りキューに残っているゴミ(マウスの移動やクリックのHIDレポート)をすべて捨てる
+            self.device.set_nonblocking(True)
+            while True:
+                if not self.device.read(65):
+                    break
+            self.device.set_nonblocking(False)
+
+            buffer = [0] * 65
+            for i in range(len(payload)):
+                buffer[i] = payload[i]
             
-        return [0] * 64
+            self._log("SEND", buffer)
+            self.device.write(buffer)
+            
+            expected_sub_id = payload[2]
+            start_time = time.time()
+            
+            # 最大1秒間、目的のパケット(0xAA とサブコマンド番号が一致するもの)が来るまで読み取りを続ける
+            while time.time() - start_time < 1.0:
+                resp = self.device.read(65, timeout_ms=200)
+                if not resp:
+                    continue
+                    
+                resp_list = list(resp)
+                
+                # Report IDの扱いに応じてパースする
+                parsed_resp = []
+                is_valid = False
+                
+                if len(resp_list) == 65 and resp_list[0] == 0 and resp_list[1] == 0xAA:
+                    if resp_list[2] == expected_sub_id:
+                        parsed_resp = resp_list[1:]
+                        is_valid = True
+                elif len(resp_list) == 64 and resp_list[0] == 0xAA:
+                    if resp_list[1] == expected_sub_id:
+                        parsed_resp = resp_list
+                        is_valid = True
+                        
+                if is_valid:
+                    self._log("RECV (MATCHED)", resp_list)
+                    return parsed_resp
+                    
+                # マッチしなかったパケット(マウスポインタの移動データ等)は無視して次を読む
+                # デバッグ用に大量に出るためログには出さないが、必要ならここで出す
+
+            self._log("ERROR", "正しいレスポンスが1秒以内に見つかりませんでした (タイムアウト)")
+            return [0] * 64
 
     def get_version(self):
         """ファームウェアのバージョンを取得"""
         req = [0, 85, 3]
         resp = self._send_command(req)
-        if len(resp) > 25:
+        if len(resp) > 25 and resp[0] == 0xAA:
             v1 = chr(resp[23]) if 48 <= resp[23] <= 57 else "0"
             v2 = chr(resp[24]) if 48 <= resp[24] <= 57 else "0"
             v3 = chr(resp[25]) if 48 <= resp[25] <= 57 else "0"
@@ -72,7 +110,7 @@ class AjazzMouse:
         """バッテリー残量の取得"""
         req = [0, 85, 48, 165, 11, 46, 1, 1, 0, 0, 0]
         resp = self._send_command(req)
-        if len(resp) > 9:
+        if len(resp) > 9 and resp[0] == 0xAA:
             return {
                 "battery": resp[8],
                 "is_charging": bool(resp[9])
@@ -83,7 +121,7 @@ class AjazzMouse:
         """無線接続でのオンライン・オフライン判定"""
         req = [0, 85, 237, 0, 1, 46, 0, 0]
         resp = self._send_command(req)
-        if len(resp) > 8:
+        if len(resp) > 8 and resp[0] == 0xAA:
             return resp[8] == 2
         return False
 
@@ -91,7 +129,7 @@ class AjazzMouse:
         """各種設定値の完全取得"""
         req = [0, 85, 14, 165, 11, 47, 1, 1, 0, 0, 0]
         resp = self._send_command(req)
-        if len(resp) > 55:
+        if len(resp) > 55 and resp[0] == 0xAA:
             config = {
                 "light_mode": resp[9],
                 "report_rate_idx": max(0, resp[10] - 1),
