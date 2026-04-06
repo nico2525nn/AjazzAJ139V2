@@ -434,6 +434,8 @@ class AjazzApp(tk.Tk):
         self._macro_profiles_loaded = False
         self._macro_profiles_loading = False
         self._macro_status_key = "idle"
+        self._macro_progress_current = 0
+        self._macro_progress_total = 0
         self._macro_editor_widget = None
         self._macro_editor_info = None
 
@@ -448,6 +450,7 @@ class AjazzApp(tk.Tk):
 
         self.style = ttk.Style(self)
         self.style.theme_use("clam")
+        self.style.configure("Macro.Horizontal.TProgressbar", troughcolor="#dfe7df", background="#2e9f57", lightcolor="#49b86f", darkcolor="#1f7d42", bordercolor="#b9cbbd")
 
         self.tray_icon = None
         self._last_tray_battery = -1
@@ -524,6 +527,25 @@ class AjazzApp(tk.Tk):
         self._macro_status_key = state_key
         if hasattr(self, "macro_status_var"):
             self.macro_status_var.set(f"{self._ui_text('macro_status_label')} {self._ui_text(f'macro_status_{state_key}')}")
+
+    def _set_macro_progress(self, current, total):
+        self._macro_progress_current = max(0, int(current))
+        self._macro_progress_total = max(0, int(total))
+        if not hasattr(self, "macro_progress_var"):
+            return
+        maximum = self._macro_progress_total or 1
+        self.macro_progress.configure(mode="determinate", maximum=maximum)
+        self.macro_progress_var.set(min(self._macro_progress_current, maximum))
+        percent = 0 if self._macro_progress_total <= 0 else round((min(self._macro_progress_current, self._macro_progress_total) / self._macro_progress_total) * 100)
+        self.macro_progress_label_var.set(f"{percent}% ({min(self._macro_progress_current, self._macro_progress_total)}/{self._macro_progress_total})" if self._macro_progress_total > 0 else "")
+
+    def _show_macro_progress(self):
+        if hasattr(self, "macro_progress_row") and not self.macro_progress_row.winfo_ismapped():
+            self.macro_progress_row.pack(fill=tk.X, pady=(4, 0))
+
+    def _hide_macro_progress(self):
+        if hasattr(self, "macro_progress_row") and self.macro_progress_row.winfo_ismapped():
+            self.macro_progress_row.pack_forget()
 
     def _load_app_settings(self):
         if os.path.exists(self.config_file):
@@ -926,6 +948,13 @@ class AjazzApp(tk.Tk):
         self.macro_status_var = tk.StringVar(value="")
         self.macro_status_label = ttk.Label(top, textvariable=self.macro_status_var)
         self.macro_status_label.pack(anchor=tk.W, pady=(4, 0))
+        self.macro_progress_row = ttk.Frame(top)
+        self.macro_progress_var = tk.DoubleVar(value=0)
+        self.macro_progress = ttk.Progressbar(self.macro_progress_row, variable=self.macro_progress_var, mode="determinate", maximum=1, style="Macro.Horizontal.TProgressbar")
+        self.macro_progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.macro_progress_label_var = tk.StringVar(value="")
+        self.macro_progress_label = ttk.Label(self.macro_progress_row, textvariable=self.macro_progress_label_var, width=12, anchor=tk.E)
+        self.macro_progress_label.pack(side=tk.LEFT, padx=(8, 0))
 
         left = ttk.Frame(self.tab_macro)
         left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
@@ -1028,6 +1057,8 @@ class AjazzApp(tk.Tk):
         self.reset_macro_btn.pack(fill=tk.X, pady=(6, 0))
 
         self._set_macro_status("idle")
+        self._set_macro_progress(0, 0)
+        self._hide_macro_progress()
 
     def _build_debug_tab(self):
         self.log_txt = scrolledtext.ScrolledText(self.tab_debug, wrap=tk.WORD, state="disabled", font=("Consolas", 10))
@@ -1232,16 +1263,27 @@ class AjazzApp(tk.Tk):
             return
         self._macro_profiles_loading = True
         self._set_macro_status("loading")
+        self._set_macro_progress(0, 0)
+        self._show_macro_progress()
         if log:
             self._append_log("System: Loading macro profiles from device...")
 
         def worker():
-            return self._merge_macro_names(decode_macro_profiles(self.mouse.get_macro_data(), resolve_macro_event_name))
+            return self._merge_macro_names(
+                decode_macro_profiles(
+                    self.mouse.get_macro_data(
+                        progress_callback=lambda current, total: self.after(0, lambda current=current, total=total: self._set_macro_progress(current, total))
+                    ),
+                    resolve_macro_event_name,
+                )
+            )
 
         def on_success(profiles):
             self._macro_profiles_loading = False
             self._macro_profiles_loaded = True
             self._set_macro_status("ready")
+            self._set_macro_progress(self._macro_progress_total, self._macro_progress_total)
+            self._hide_macro_progress()
             self.macro_profiles = profiles
             self._refresh_macro_profile_list()
             self._refresh_macro_events()
@@ -1253,6 +1295,7 @@ class AjazzApp(tk.Tk):
         def on_error(exc):
             self._macro_profiles_loading = False
             self._set_macro_status("error")
+            self._hide_macro_progress()
             if log:
                 self._append_log(f"ERROR: Failed to load macro data: {exc}")
 

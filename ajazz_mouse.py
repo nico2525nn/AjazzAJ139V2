@@ -510,9 +510,12 @@ class AjazzMouse:
     def reset_mouse_keys(self):
         self._send_command(build_reset_mouse_keys_request())
 
-    def get_macro_data(self) -> list[int]:
+    def get_macro_data(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> list[int]:
         data: list[int] = []
-        for offset in range(0, MACRO_DATA_SIZE, MACRO_CHUNK_SIZE):
+        total_chunks = (MACRO_DATA_SIZE + MACRO_CHUNK_SIZE - 1) // MACRO_CHUNK_SIZE
+        if progress_callback:
+            progress_callback(0, total_chunks)
+        for chunk_index, offset in enumerate(range(0, MACRO_DATA_SIZE, MACRO_CHUNK_SIZE), start=1):
             chunk_length = min(MACRO_CHUNK_SIZE, MACRO_DATA_SIZE - offset)
             response = self._send_command(
                 build_macro_read_request(chunk_length, offset),
@@ -527,6 +530,8 @@ class AjazzMouse:
             else:
                 chunk = [0] * chunk_length
             data.extend(chunk)
+            if progress_callback:
+                progress_callback(chunk_index, total_chunks)
         return data[:MACRO_DATA_SIZE]
 
     def set_macro_data(self, data: Sequence[int]):

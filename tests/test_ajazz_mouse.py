@@ -88,6 +88,29 @@ class AjazzMouseProtocolTests(unittest.TestCase):
         self.assertTrue(matcher([0xAA, 0xFA, 0xA5, 0x2E, 0x38, 0x01, 0x01, 0x00, 0xD0, 0x24]))
         self.assertFalse(matcher([0xAA, 0x30, 0xA5, 0x0B, 0x0A, 0x01, 0x01, 0x00]))
 
+    def test_get_macro_data_reports_chunk_progress(self):
+        from ajazz_mouse import AjazzMouse, MACRO_CHUNK_SIZE, MACRO_DATA_SIZE
+
+        mouse = AjazzMouse()
+        mouse.device = object()
+        progress_updates = []
+
+        def fake_send_command(payload, matcher=None, timeout=1.0, log_timeout=True):
+            chunk_length = payload[2]
+            response = [0] * 64
+            response[8 : 8 + chunk_length] = [1] * chunk_length
+            return response
+
+        mouse._send_command = fake_send_command
+
+        data = mouse.get_macro_data(progress_callback=lambda current, total: progress_updates.append((current, total)))
+
+        total_chunks = (MACRO_DATA_SIZE + MACRO_CHUNK_SIZE - 1) // MACRO_CHUNK_SIZE
+        self.assertEqual(len(data), MACRO_DATA_SIZE)
+        self.assertEqual(progress_updates[0], (0, total_chunks))
+        self.assertEqual(progress_updates[-1], (total_chunks, total_chunks))
+        self.assertEqual(len(progress_updates), total_chunks + 1)
+
 
 if __name__ == "__main__":
     unittest.main()
