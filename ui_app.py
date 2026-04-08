@@ -4,6 +4,15 @@ import os
 import threading
 import time
 import tkinter as tk
+from tkinter import font as tkfont
+
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 from copy import deepcopy
 from tkinter import messagebox, ttk
 
@@ -446,7 +455,7 @@ class AjazzApp(tk.Tk):
         self.mouse = AjazzMouse(log_callback=self._append_log)
         self.current_config = None
         self.lang = "en"
-        self.theme_name = "light"
+        self.theme_name = "dark"
         self.mouse_keys = copy_default_bindings()
         self.macro_profiles = [MacroProfile(slot=index, name=f"Macro {index + 1}") for index in range(32)]
         self.selected_button_index = 0
@@ -477,12 +486,11 @@ class AjazzApp(tk.Tk):
         self._load_macro_metadata()
 
         self.title(self._t("title"))
-        self.geometry("1180x820")
-        self.minsize(1080, 760)
+        self.geometry("1180x1050")
+        self.minsize(1080, 1050)
 
         self.style = ttk.Style(self)
         self.style.theme_use("clam")
-        self.style.configure("PageSave.TButton", font=("Segoe UI", 10, "bold"))
 
         self.tray_icon = None
         self._last_tray_battery = -1
@@ -623,94 +631,113 @@ class AjazzApp(tk.Tk):
     def _apply_theme(self, theme_name, persist=True):
         palettes = {
             "light": {
-                "bg": "#eef1f5",
-                "panel": "#e3e7ed",
-                "field": "#fafbfc",
-                "fg": "#1f2329",
-                "muted": "#5f6975",
-                "accent": "#2e9f57",
-                "accent_light": "#49b86f",
-                "accent_dark": "#1f7d42",
-                "dirty": "#f7e8b2",
-                "dirty_fg": "#a05a00",
-                "border": "#c3cad4",
-                "trough": "#d7dde6",
+                "bg": "#f0f2f5",
+                "panel": "#e4e7ec",
+                "field": "#ffffff",
+                "fg": "#1a1d23",
+                "muted": "#6b7280",
+                "accent": "#0ea5a5",
+                "accent_light": "#2dd4bf",
+                "accent_dark": "#0d8a8a",
+                "accent_fg": "#ffffff",
+                "dirty": "#fef3c7",
+                "dirty_fg": "#b45309",
+                "border": "#d1d5db",
+                "trough": "#e5e7eb",
+                "tab_selected": "#ffffff",
+                "heading": "#f3f4f6",
+                "select_bg": "#0ea5a5",
+                "select_fg": "#ffffff",
             },
             "dark": {
-                "bg": "#000000",
-                "panel": "#121212",
-                "field": "#1f1f1f",
-                "fg": "#ffffff",
-                "muted": "#d9d9d9",
-                "accent": "#58d97f",
-                "accent_light": "#7eed9f",
-                "accent_dark": "#2fb85a",
-                "dirty": "#705600",
-                "dirty_fg": "#ffe08a",
-                "border": "#4a4a4a",
-                "trough": "#101010",
+                "bg": "#0f1117",
+                "panel": "#1a1d27",
+                "field": "#21242f",
+                "fg": "#e8eaed",
+                "muted": "#8b8fa3",
+                "accent": "#2dd4bf",
+                "accent_light": "#5eead4",
+                "accent_dark": "#14b8a6",
+                "accent_fg": "#0f1117",
+                "dirty": "#422006",
+                "dirty_fg": "#fbbf24",
+                "border": "#2e3241",
+                "trough": "#151821",
+                "tab_selected": "#21242f",
+                "heading": "#1a1d27",
+                "select_bg": "#2dd4bf",
+                "select_fg": "#0f1117",
             },
         }
-        palette = palettes.get(theme_name, palettes["light"])
-        self.theme_name = theme_name if theme_name in palettes else "light"
+        palette = palettes.get(theme_name, palettes["dark"])
+        self.theme_name = theme_name if theme_name in palettes else "dark"
         self._theme_palette = palette
         self.configure(bg=palette["bg"])
-        font_family = "Yu Gothic UI" if self.lang == "ja" else "Segoe UI"
-        font = (font_family, 10, "bold" if self.theme_name == "dark" else "normal")
-        self.style.configure(".", background=palette["bg"], foreground=palette["fg"], fieldbackground=palette["field"], font=font)
-        self.style.configure("TFrame", background=palette["bg"])
-        self.style.configure("TLabel", background=palette["bg"], foreground=palette["fg"], font=font)
-        self.style.configure("TLabelframe", background=palette["bg"], foreground=palette["fg"], bordercolor=palette["border"])
-        self.style.configure("TLabelframe.Label", background=palette["bg"], foreground=palette["fg"], font=font)
-        self.style.configure("TButton", background=palette["panel"], foreground=palette["fg"], bordercolor=palette["border"], focusthickness=1, focuscolor=palette["border"], font=font)
-        self.style.map("TButton", background=[("active", palette["field"]), ("pressed", palette["field"])], foreground=[("disabled", palette["muted"])])
-        self.style.configure("TEntry", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], font=font)
-        self.style.configure("TCombobox", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], arrowcolor=palette["fg"], font=font)
-        self.style.map("TCombobox", fieldbackground=[("readonly", palette["field"])], foreground=[("readonly", palette["fg"])])
-        self.style.configure("TSpinbox", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], arrowcolor=palette["fg"], font=font)
-        self.style.configure("Treeview", background=palette["field"], fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], font=font)
-        self.style.map("Treeview", background=[("selected", palette["accent"])], foreground=[("selected", palette["fg"])])
-        self.style.configure("Treeview.Heading", background=palette["panel"], foreground=palette["fg"], bordercolor=palette["border"], font=font)
-        self.style.configure("TNotebook", background=palette["bg"], borderwidth=0)
-        self.style.configure("TNotebook.Tab", background=palette["panel"], foreground=palette["muted"], bordercolor=palette["border"], font=font)
-        self.style.map("TNotebook.Tab", background=[("selected", palette["field"]), ("active", palette["field"])], foreground=[("selected", palette["fg"]), ("active", palette["fg"])])
-        self.style.configure("TScrollbar", background=palette["panel"], troughcolor=palette["bg"])
+        
+        available_fonts = tkfont.families()
+        def get_best_font(choices):
+            for f in choices:
+                if f in available_fonts:
+                    return f
+            return choices[-1]
+
+        is_ja = self.lang == "ja"
+        font_family = get_best_font(["Noto Sans JP", "Noto Sans CJK JP", "Meiryo", "Meiryo UI", "Yu Gothic UI"]) if is_ja else get_best_font(["Segoe UI Variable Text", "Segoe UI Semibold", "Segoe UI"])
+        font_size = 10
+        font = (font_family, font_size)
+        font_bold = (font_family, font_size, "bold")
+        font_small = (font_family, font_size - 1)
+        font_heading = (font_family, font_size + 1, "bold")
+        self.style.configure(".", background=palette["bg"], foreground=palette["fg"], fieldbackground=palette["field"], font=font, borderwidth=1, bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"])
+        self.style.configure("TFrame", background=palette["bg"], relief="flat")
+        self.style.configure("TLabel", background=palette["bg"], foreground=palette["fg"], font=font, relief="flat")
+        self.style.configure("Heading.TLabel", background=palette["bg"], foreground=palette["accent"], font=font_heading)
+        self.style.configure("Muted.TLabel", background=palette["bg"], foreground=palette["muted"], font=font_small)
+        self.style.configure("TLabelframe", background=palette["bg"], foreground=palette["accent"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"], relief="solid", borderwidth=1)
+        self.style.configure("TLabelframe.Label", background=palette["bg"], foreground=palette["accent"], font=font_bold)
+        self.style.configure("TButton", background=palette["panel"], foreground=palette["fg"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"], focusthickness=0, focuscolor=palette["border"], padding=(12, 6), font=font, relief="flat", borderwidth=1)
+        self.style.map("TButton", background=[("active", palette["border"]), ("pressed", palette["accent_dark"])], foreground=[("disabled", palette["muted"]), ("pressed", palette["accent_fg"])], bordercolor=[("active", palette["muted"])])
+        self.style.configure("Accent.TButton", background=palette["accent"], foreground=palette["accent_fg"], bordercolor=palette["accent_dark"], lightcolor=palette["accent_dark"], darkcolor=palette["accent_dark"], font=font_bold, padding=(14, 7), relief="flat")
+        self.style.map("Accent.TButton", background=[("active", palette["accent_light"]), ("pressed", palette["accent_dark"])], foreground=[("active", palette["accent_fg"]), ("pressed", palette["accent_fg"])])
+        self.style.configure("TEntry", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"], padding=(6, 4), font=font, relief="flat", borderwidth=1)
+        self.style.configure("TCombobox", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"], arrowcolor=palette["muted"], padding=(6, 4), font=font, relief="flat", borderwidth=1)
+        self.style.map("TCombobox", fieldbackground=[("readonly", palette["field"])], foreground=[("readonly", palette["fg"])], arrowcolor=[("active", palette["accent"])])
+        self.style.configure("TSpinbox", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"], arrowcolor=palette["muted"], padding=(6, 4), font=font, relief="flat", borderwidth=1)
+        self.style.configure("Treeview", background=palette["field"], fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"], rowheight=28, font=font, relief="flat", borderwidth=1)
+        self.style.map("Treeview", background=[("selected", palette["select_bg"])], foreground=[("selected", palette["select_fg"])])
+        self.style.configure("Treeview.Heading", background=palette["heading"], foreground=palette["muted"], bordercolor=palette["border"], lightcolor=palette["border"], darkcolor=palette["border"], font=font_bold, padding=(6, 4), relief="flat", borderwidth=1)
+        self.style.configure("TNotebook", background=palette["bg"], borderwidth=0, lightcolor=palette["bg"], darkcolor=palette["bg"], bordercolor=palette["bg"], tabmargins=(0, 2, 0, 0))
+        self.style.configure("TNotebook.Tab", background=palette["panel"], foreground=palette["muted"], bordercolor=palette["panel"], lightcolor=palette["panel"], darkcolor=palette["panel"], focuscolor=palette["tab_selected"], borderwidth=1, padding=(16, 8), font=font, relief="flat")
+        self.style.map("TNotebook.Tab", background=[("selected", palette["tab_selected"]), ("active", palette["field"])], foreground=[("selected", palette["accent"]), ("active", palette["fg"])], bordercolor=[("selected", palette["tab_selected"]), ("active", palette["field"])], lightcolor=[("selected", palette["tab_selected"]), ("active", palette["field"])], darkcolor=[("selected", palette["tab_selected"]), ("active", palette["field"])], padding=[("selected", (16, 8))])
+        self.style.configure("TScrollbar", background=palette["panel"], troughcolor=palette["bg"], borderwidth=0, arrowsize=12)
+        self.style.configure("TCheckbutton", background=palette["bg"], foreground=palette["fg"], font=font)
+        self.style.map("TCheckbutton", background=[("active", palette["bg"])])
+        self.style.configure("TRadiobutton", background=palette["bg"], foreground=palette["fg"], font=font)
+        self.style.map("TRadiobutton", background=[("active", palette["bg"])])
+        self.style.configure("TSeparator", background=palette["border"])
         self.style.configure("Macro.Horizontal.TProgressbar", troughcolor=palette["trough"], background=palette["accent"], lightcolor=palette["accent_light"], darkcolor=palette["accent_dark"], bordercolor=palette["border"])
+        self.style.configure("PageSave.TButton", background=palette["accent"], foreground=palette["accent_fg"], bordercolor=palette["accent_dark"], font=font_bold, padding=(16, 7))
+        self.style.map("PageSave.TButton", background=[("active", palette["accent_light"]), ("pressed", palette["accent_dark"]), ("disabled", palette["panel"])], foreground=[("disabled", palette["muted"]), ("active", palette["accent_fg"])])
         self.style.configure("Dirty.TEntry", fieldbackground=palette["dirty"], foreground=palette["fg"])
         self.style.configure("Dirty.TCombobox", fieldbackground=palette["dirty"], foreground=palette["fg"], arrowcolor=palette["fg"])
-        self.style.configure("Dirty.TButton", background=palette["dirty"], foreground=palette["fg"], bordercolor=palette["dirty_fg"])
-        self.style.configure("Dirty.TLabel", background=palette["bg"], foreground=palette["dirty_fg"])
-        self.style.configure("Clean.TLabel", background=palette["bg"], foreground=palette["accent"])
+        self.style.configure("Dirty.TButton", background=palette["dirty"], foreground=palette["dirty_fg"], bordercolor=palette["dirty_fg"])
+        self.style.configure("Dirty.TLabel", background=palette["bg"], foreground=palette["dirty_fg"], font=font_bold)
+        self.style.configure("Clean.TLabel", background=palette["bg"], foreground=palette["accent"], font=font)
+        listbox_opts = dict(bg=palette["field"], fg=palette["fg"], selectbackground=palette["select_bg"], selectforeground=palette["select_fg"], relief=tk.FLAT, bd=0, highlightthickness=1, highlightbackground=palette["border"], highlightcolor=palette["accent"], font=(font_family, font_size))
         if hasattr(self, "log_txt"):
-            self.log_txt.configure(bg=palette["field"], fg=palette["fg"], insertbackground=palette["fg"])
+            self.log_txt.configure(bg=palette["field"], fg=palette["muted"], insertbackground=palette["fg"], font=("Cascadia Code", 10) if not is_ja else ("Consolas", 10))
+        if hasattr(self, "debug_frame"):
+            self.debug_frame.configure(bg=palette["field"], highlightbackground=palette["border"], highlightcolor=palette["accent"], highlightthickness=1)
         if hasattr(self, "log_scrollbar"):
-            self.log_scrollbar.configure(
-                bg=palette["panel"],
-                troughcolor=palette["bg"],
-                activebackground=palette["field"],
-                relief=tk.FLAT,
-                bd=0,
-                elementborderwidth=0,
-                highlightbackground=palette["border"],
-                highlightcolor=palette["border"],
-                highlightthickness=0,
-            )
+            self.log_scrollbar.configure(bg=palette["panel"], troughcolor=palette["bg"], activebackground=palette["field"], relief=tk.FLAT, bd=0, elementborderwidth=0, highlightbackground=palette["border"], highlightcolor=palette["border"], highlightthickness=0)
         if hasattr(self, "macro_profile_listbox"):
-            self.macro_profile_listbox.configure(bg=palette["field"], fg=palette["fg"], selectbackground=palette["accent"], selectforeground=palette["fg"])
+            self.macro_profile_listbox.configure(**listbox_opts)
         if hasattr(self, "keyboard_preset_list"):
             for listbox in (self.keyboard_preset_list, self.media_preset_list, self.mouse_preset_list):
-                listbox.configure(bg=palette["field"], fg=palette["fg"], selectbackground=palette["accent"], selectforeground=palette["fg"])
+                listbox.configure(**listbox_opts)
         for combobox_name in (
-            "lang_combo",
-            "theme_combo",
-            "poll_combo",
-            "lod_combo",
-            "dpi_idx_combo",
-            "light_combo",
-            "key_macro_profile_combo",
-            "key_macro_mode_combo",
-            "manual_key_combo",
-            "manual_mouse_combo",
+            "lang_combo", "theme_combo", "poll_combo", "lod_combo", "dpi_idx_combo", "light_combo",
+            "key_macro_profile_combo", "key_macro_mode_combo", "manual_key_combo", "manual_mouse_combo",
         ):
             combobox = getattr(self, combobox_name, None)
             if combobox is not None:
@@ -925,29 +952,31 @@ class AjazzApp(tk.Tk):
 
     def _build_ui(self):
         header = ttk.Frame(self)
-        header.pack(fill=tk.X, padx=10, pady=(8, 0))
-        self.lbl_lang_label = ttk.Label(header)
+        header.pack(fill=tk.X, padx=16, pady=(10, 0))
+        self.app_title_label = ttk.Label(header, text="AJ139 V2", style="Heading.TLabel")
+        self.app_title_label.pack(side=tk.LEFT, padx=(0, 16))
+        self.lbl_lang_label = ttk.Label(header, style="Muted.TLabel")
         self.lbl_lang_label.pack(side=tk.LEFT)
         self.lang_var = tk.StringVar(value=self.lang)
         self.lang_combo = ttk.Combobox(header, textvariable=self.lang_var, values=["en", "ja"], state="readonly", width=6)
-        self.lang_combo.pack(side=tk.LEFT, padx=6)
+        self.lang_combo.pack(side=tk.LEFT, padx=(4, 12))
         self.lang_combo.bind("<<ComboboxSelected>>", lambda event: self.change_language(self.lang_var.get()))
-        self.lbl_theme_label = ttk.Label(header)
-        self.lbl_theme_label.pack(side=tk.LEFT, padx=(12, 0))
+        self.lbl_theme_label = ttk.Label(header, style="Muted.TLabel")
+        self.lbl_theme_label.pack(side=tk.LEFT)
         self.theme_var = tk.StringVar(value=self.theme_name)
         self.theme_combo = ttk.Combobox(header, textvariable=self.theme_var, state="readonly", width=10)
-        self.theme_combo.pack(side=tk.LEFT, padx=6)
+        self.theme_combo.pack(side=tk.LEFT, padx=(4, 0))
         self.theme_combo.bind("<<ComboboxSelected>>", lambda _event: self._on_theme_selected())
 
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=16, pady=(10, 6))
         self.notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
-        self.tab_status = ttk.Frame(self.notebook, padding=10)
-        self.tab_perf = ttk.Frame(self.notebook, padding=10)
-        self.tab_sys = ttk.Frame(self.notebook, padding=10)
-        self.tab_keys = ttk.Frame(self.notebook, padding=10)
-        self.tab_macro = ttk.Frame(self.notebook, padding=10)
-        self.tab_debug = ttk.Frame(self.notebook, padding=10)
+        self.tab_status = ttk.Frame(self.notebook, padding=16)
+        self.tab_perf = ttk.Frame(self.notebook, padding=16)
+        self.tab_sys = ttk.Frame(self.notebook, padding=16)
+        self.tab_keys = ttk.Frame(self.notebook, padding=12)
+        self.tab_macro = ttk.Frame(self.notebook, padding=12)
+        self.tab_debug = ttk.Frame(self.notebook, padding=12)
 
         for tab in (self.tab_status, self.tab_perf, self.tab_sys, self.tab_keys, self.tab_macro, self.tab_debug):
             self.notebook.add(tab, text="")
@@ -960,7 +989,7 @@ class AjazzApp(tk.Tk):
         self._build_debug_tab()
 
         bottom = ttk.Frame(self)
-        bottom.pack(fill=tk.X, padx=10, pady=(0, 10))
+        bottom.pack(fill=tk.X, padx=16, pady=(4, 12))
         self.page_status_var = tk.StringVar(value="")
         self.page_status_label = ttk.Label(bottom, textvariable=self.page_status_var)
         self.page_status_label.pack(side=tk.LEFT)
@@ -973,9 +1002,9 @@ class AjazzApp(tk.Tk):
         self.status_var = tk.StringVar()
         self.version_var = tk.StringVar()
         self.battery_var = tk.StringVar()
-        self.status_frame = ttk.LabelFrame(self.tab_status, padding=10)
+        self.status_frame = ttk.LabelFrame(self.tab_status, padding=16)
         self.status_frame.pack(fill=tk.X)
-        ttk.Label(self.status_frame, textvariable=self.status_var, font=("Segoe UI", 12, "bold")).pack(anchor=tk.W)
+        ttk.Label(self.status_frame, textvariable=self.status_var, style="Heading.TLabel").pack(anchor=tk.W, pady=(0, 8))
         ttk.Label(self.status_frame, textvariable=self.version_var).pack(anchor=tk.W, pady=(4, 0))
         ttk.Label(self.status_frame, textvariable=self.battery_var).pack(anchor=tk.W, pady=(4, 0))
 
@@ -1063,11 +1092,11 @@ class AjazzApp(tk.Tk):
             self.key_slot_vars.append(variable)
             self.key_slot_buttons.append(button)
 
-        self.keys_current_frame = ttk.LabelFrame(right, padding=8)
+        self.keys_current_frame = ttk.LabelFrame(right, padding=12)
         self.keys_current_frame.pack(fill=tk.X)
         self.current_key_var = tk.StringVar(value="-")
-        ttk.Label(self.keys_current_frame, textvariable=self.current_key_var, font=("Segoe UI", 10, "bold")).pack(anchor=tk.W)
-        self.keys_hint_label = ttk.Label(self.keys_current_frame, justify=tk.LEFT, wraplength=620)
+        ttk.Label(self.keys_current_frame, textvariable=self.current_key_var, style="Heading.TLabel").pack(anchor=tk.W, pady=(0, 4))
+        self.keys_hint_label = ttk.Label(self.keys_current_frame, justify=tk.LEFT, wraplength=620, style="Muted.TLabel")
         self.keys_hint_label.pack(anchor=tk.W, pady=(4, 0))
 
         self.keys_presets_frame = ttk.LabelFrame(right, padding=8)
@@ -1159,7 +1188,7 @@ class AjazzApp(tk.Tk):
     def _build_macro_tab(self):
         top = ttk.Frame(self.tab_macro)
         top.pack(fill=tk.X, pady=(0, 8))
-        self.macro_hint_label = ttk.Label(top, justify=tk.LEFT)
+        self.macro_hint_label = ttk.Label(top, justify=tk.LEFT, style="Muted.TLabel")
         self.macro_hint_label.pack(anchor=tk.W)
         self.macro_status_var = tk.StringVar(value="")
         self.macro_status_label = ttk.Label(top, textvariable=self.macro_status_var)
@@ -1187,14 +1216,14 @@ class AjazzApp(tk.Tk):
 
         self.macro_events_frame = ttk.LabelFrame(center, padding=8)
         self.macro_events_frame.pack(fill=tk.BOTH, expand=True)
-        self.macro_tree = ttk.Treeview(self.macro_events_frame, columns=("type", "name", "action", "delay"), show="headings", height=18)
+        self.macro_tree = ttk.Treeview(self.macro_events_frame, columns=("type", "name", "action", "delay"), show="headings", height=13)
         for column, width in (("type", 90), ("name", 180), ("action", 90), ("delay", 80)):
             self.macro_tree.column(column, width=width, anchor=tk.CENTER if column != "name" else tk.W)
             self.macro_tree.heading(column, text="")
         self.macro_tree.pack(fill=tk.BOTH, expand=True)
         self.macro_tree.bind("<<TreeviewSelect>>", self._on_macro_event_selected)
         self.macro_tree.bind("<Double-1>", self._on_macro_tree_double_click)
-        self.macro_edit_hint_label = ttk.Label(self.macro_events_frame, justify=tk.LEFT)
+        self.macro_edit_hint_label = ttk.Label(self.macro_events_frame, justify=tk.LEFT, style="Muted.TLabel")
         self.macro_edit_hint_label.pack(anchor=tk.W, pady=(6, 0))
 
         event_actions = ttk.Frame(self.macro_events_frame)
@@ -1225,7 +1254,7 @@ class AjazzApp(tk.Tk):
         self.macro_name_var = tk.StringVar()
         self.macro_name_entry = ttk.Entry(name_row, textvariable=self.macro_name_var, width=18)
         self.macro_name_entry.pack(side=tk.LEFT, padx=6)
-        self.record_btn = ttk.Button(self.macro_controls_frame, command=self._toggle_recording)
+        self.record_btn = ttk.Button(self.macro_controls_frame, command=self._toggle_recording, style="Accent.TButton")
         self.record_btn.pack(fill=tk.X, pady=(10, 0))
 
         self.delay_mode_frame = ttk.LabelFrame(self.macro_controls_frame, padding=6)
@@ -1278,12 +1307,12 @@ class AjazzApp(tk.Tk):
         self.macro_delay_spinbox.bind("<FocusOut>", lambda _event: self._update_selected_macro_delay())
 
     def _build_debug_tab(self):
-        debug_frame = tk.Frame(self.tab_debug, bd=0, highlightthickness=0)
-        debug_frame.pack(fill=tk.BOTH, expand=True)
-        self.log_scrollbar = tk.Scrollbar(debug_frame, orient=tk.VERTICAL)
+        self.debug_frame = tk.Frame(self.tab_debug, bd=0, highlightthickness=1)
+        self.debug_frame.pack(fill=tk.BOTH, expand=True)
+        self.log_scrollbar = tk.Scrollbar(self.debug_frame, orient=tk.VERTICAL)
         self.log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_txt = tk.Text(
-            debug_frame,
+            self.debug_frame,
             wrap=tk.WORD,
             state="disabled",
             font=("Consolas", 10),
