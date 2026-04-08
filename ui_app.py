@@ -1,10 +1,11 @@
 import json
+import ctypes
 import os
 import threading
 import time
 import tkinter as tk
 from copy import deepcopy
-from tkinter import messagebox, scrolledtext, ttk
+from tkinter import messagebox, ttk
 
 import pystray
 from PIL import Image, ImageDraw, ImageFont
@@ -60,6 +61,19 @@ LANG_DICT = {
         "log_sys_writing": "System: ==== Writing settings... ====",
         "msg_success": "Settings written successfully.",
         "msg_err_conn": "Device not connected or configuration not loaded.",
+        "theme_label": "Theme",
+        "theme_light": "Light",
+        "theme_dark": "Dark",
+        "save_page": "Save This Page",
+        "save_disabled": "Nothing to save on this page",
+        "save_perf": "Save Performance",
+        "save_sys": "Save Lighting",
+        "save_keys": "Save Key Mapping",
+        "save_macro": "Save Macros",
+        "unsaved_changes": "Unsaved changes",
+        "unsaved_prompt": "There are unsaved changes on this page. Save them before leaving?",
+        "dirty_hint": "Unsaved changes",
+        "clean_hint": "Saved",
         "tray_open": "Open Settings",
         "tray_exit": "Exit",
         "keys_select": "Button Slots",
@@ -214,6 +228,19 @@ LANG_DICT = {
         "macro_write_ok": "マクロを書き込みました。",
         "keys_write_ok": "キーマッピングを書き込みました。",
         "reset_confirm": "デバイス上のデータをリセットしますか？",
+        "theme_label": "テーマ",
+        "theme_light": "ライト",
+        "theme_dark": "ダーク",
+        "save_page": "このページを保存",
+        "save_disabled": "このページに保存する変更はありません",
+        "save_perf": "パフォーマンスを保存",
+        "save_sys": "ライティングを保存",
+        "save_keys": "キーマッピングを保存",
+        "save_macro": "マクロを保存",
+        "unsaved_changes": "未保存の変更",
+        "unsaved_prompt": "このページに未保存の変更があります。タブを切り替える前に保存しますか？",
+        "dirty_hint": "未保存の変更あり",
+        "clean_hint": "保存済み",
     },
 }
 
@@ -419,6 +446,7 @@ class AjazzApp(tk.Tk):
         self.mouse = AjazzMouse(log_callback=self._append_log)
         self.current_config = None
         self.lang = "en"
+        self.theme_name = "light"
         self.mouse_keys = copy_default_bindings()
         self.macro_profiles = [MacroProfile(slot=index, name=f"Macro {index + 1}") for index in range(32)]
         self.selected_button_index = 0
@@ -436,6 +464,10 @@ class AjazzApp(tk.Tk):
         self._macro_status_key = "idle"
         self._macro_progress_current = 0
         self._macro_progress_total = 0
+        self._saved_mouse_keys = copy_default_bindings()
+        self._saved_macro_profiles = deepcopy(self.macro_profiles)
+        self._tab_change_guard = False
+        self._current_tab_id = None
         self._macro_editor_widget = None
         self._macro_editor_info = None
 
@@ -450,13 +482,19 @@ class AjazzApp(tk.Tk):
 
         self.style = ttk.Style(self)
         self.style.theme_use("clam")
-        self.style.configure("Macro.Horizontal.TProgressbar", troughcolor="#dfe7df", background="#2e9f57", lightcolor="#49b86f", darkcolor="#1f7d42", bordercolor="#b9cbbd")
+        self.style.configure("PageSave.TButton", font=("Segoe UI", 10, "bold"))
 
         self.tray_icon = None
         self._last_tray_battery = -1
         self.protocol("WM_DELETE_WINDOW", self._hide_window)
 
         self._build_ui()
+        self._current_tab_id = self.notebook.select()
+        for variable in (self.poll_var, self.debounce_var, self.lod_var, self.dpi_idx_var, self.light_var, self.sleep_var):
+            variable.trace_add("write", lambda *_args: self._refresh_dirty_state())
+        for variable in self.dpi_vars:
+            variable.trace_add("write", lambda *_args: self._refresh_dirty_state())
+        self._apply_theme(self.theme_name, persist=False)
         self.change_language(self.lang, skip_ui_update=True)
         self.after(50, self._refresh_status)
 
@@ -547,19 +585,165 @@ class AjazzApp(tk.Tk):
         if hasattr(self, "macro_progress_row") and self.macro_progress_row.winfo_ismapped():
             self.macro_progress_row.pack_forget()
 
+    def _apply_window_chrome(self, dark):
+        if os.name != "nt":
+            return
+        try:
+            self.update_idletasks()
+            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
+            value = ctypes.c_int(1 if dark else 0)
+            for attr in (20, 19):
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(value), ctypes.sizeof(value))
+        except Exception:
+            pass
+
+    def _style_combobox_popdown(self, widget, palette):
+        try:
+            popdown = self.tk.call("ttk::combobox::PopdownWindow", str(widget))
+            listbox_path = f"{popdown}.f.l"
+            self.tk.call(
+                listbox_path,
+                "configure",
+                "-background",
+                palette["field"],
+                "-foreground",
+                palette["fg"],
+                "-selectbackground",
+                palette["accent"],
+                "-selectforeground",
+                palette["fg"],
+                "-highlightthickness",
+                0,
+                "-borderwidth",
+                0,
+            )
+        except Exception:
+            pass
+
+    def _apply_theme(self, theme_name, persist=True):
+        palettes = {
+            "light": {
+                "bg": "#eef1f5",
+                "panel": "#e3e7ed",
+                "field": "#fafbfc",
+                "fg": "#1f2329",
+                "muted": "#5f6975",
+                "accent": "#2e9f57",
+                "accent_light": "#49b86f",
+                "accent_dark": "#1f7d42",
+                "dirty": "#f7e8b2",
+                "dirty_fg": "#a05a00",
+                "border": "#c3cad4",
+                "trough": "#d7dde6",
+            },
+            "dark": {
+                "bg": "#000000",
+                "panel": "#121212",
+                "field": "#1f1f1f",
+                "fg": "#ffffff",
+                "muted": "#d9d9d9",
+                "accent": "#58d97f",
+                "accent_light": "#7eed9f",
+                "accent_dark": "#2fb85a",
+                "dirty": "#705600",
+                "dirty_fg": "#ffe08a",
+                "border": "#4a4a4a",
+                "trough": "#101010",
+            },
+        }
+        palette = palettes.get(theme_name, palettes["light"])
+        self.theme_name = theme_name if theme_name in palettes else "light"
+        self._theme_palette = palette
+        self.configure(bg=palette["bg"])
+        font_family = "Yu Gothic UI" if self.lang == "ja" else "Segoe UI"
+        font = (font_family, 10, "bold" if self.theme_name == "dark" else "normal")
+        self.style.configure(".", background=palette["bg"], foreground=palette["fg"], fieldbackground=palette["field"], font=font)
+        self.style.configure("TFrame", background=palette["bg"])
+        self.style.configure("TLabel", background=palette["bg"], foreground=palette["fg"], font=font)
+        self.style.configure("TLabelframe", background=palette["bg"], foreground=palette["fg"], bordercolor=palette["border"])
+        self.style.configure("TLabelframe.Label", background=palette["bg"], foreground=palette["fg"], font=font)
+        self.style.configure("TButton", background=palette["panel"], foreground=palette["fg"], bordercolor=palette["border"], focusthickness=1, focuscolor=palette["border"], font=font)
+        self.style.map("TButton", background=[("active", palette["field"]), ("pressed", palette["field"])], foreground=[("disabled", palette["muted"])])
+        self.style.configure("TEntry", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], font=font)
+        self.style.configure("TCombobox", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], arrowcolor=palette["fg"], font=font)
+        self.style.map("TCombobox", fieldbackground=[("readonly", palette["field"])], foreground=[("readonly", palette["fg"])])
+        self.style.configure("TSpinbox", fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], arrowcolor=palette["fg"], font=font)
+        self.style.configure("Treeview", background=palette["field"], fieldbackground=palette["field"], foreground=palette["fg"], bordercolor=palette["border"], font=font)
+        self.style.map("Treeview", background=[("selected", palette["accent"])], foreground=[("selected", palette["fg"])])
+        self.style.configure("Treeview.Heading", background=palette["panel"], foreground=palette["fg"], bordercolor=palette["border"], font=font)
+        self.style.configure("TNotebook", background=palette["bg"], borderwidth=0)
+        self.style.configure("TNotebook.Tab", background=palette["panel"], foreground=palette["muted"], bordercolor=palette["border"], font=font)
+        self.style.map("TNotebook.Tab", background=[("selected", palette["field"]), ("active", palette["field"])], foreground=[("selected", palette["fg"]), ("active", palette["fg"])])
+        self.style.configure("TScrollbar", background=palette["panel"], troughcolor=palette["bg"])
+        self.style.configure("Macro.Horizontal.TProgressbar", troughcolor=palette["trough"], background=palette["accent"], lightcolor=palette["accent_light"], darkcolor=palette["accent_dark"], bordercolor=palette["border"])
+        self.style.configure("Dirty.TEntry", fieldbackground=palette["dirty"], foreground=palette["fg"])
+        self.style.configure("Dirty.TCombobox", fieldbackground=palette["dirty"], foreground=palette["fg"], arrowcolor=palette["fg"])
+        self.style.configure("Dirty.TButton", background=palette["dirty"], foreground=palette["fg"], bordercolor=palette["dirty_fg"])
+        self.style.configure("Dirty.TLabel", background=palette["bg"], foreground=palette["dirty_fg"])
+        self.style.configure("Clean.TLabel", background=palette["bg"], foreground=palette["accent"])
+        if hasattr(self, "log_txt"):
+            self.log_txt.configure(bg=palette["field"], fg=palette["fg"], insertbackground=palette["fg"])
+        if hasattr(self, "log_scrollbar"):
+            self.log_scrollbar.configure(
+                bg=palette["panel"],
+                troughcolor=palette["bg"],
+                activebackground=palette["field"],
+                relief=tk.FLAT,
+                bd=0,
+                elementborderwidth=0,
+                highlightbackground=palette["border"],
+                highlightcolor=palette["border"],
+                highlightthickness=0,
+            )
+        if hasattr(self, "macro_profile_listbox"):
+            self.macro_profile_listbox.configure(bg=palette["field"], fg=palette["fg"], selectbackground=palette["accent"], selectforeground=palette["fg"])
+        if hasattr(self, "keyboard_preset_list"):
+            for listbox in (self.keyboard_preset_list, self.media_preset_list, self.mouse_preset_list):
+                listbox.configure(bg=palette["field"], fg=palette["fg"], selectbackground=palette["accent"], selectforeground=palette["fg"])
+        for combobox_name in (
+            "lang_combo",
+            "theme_combo",
+            "poll_combo",
+            "lod_combo",
+            "dpi_idx_combo",
+            "light_combo",
+            "key_macro_profile_combo",
+            "key_macro_mode_combo",
+            "manual_key_combo",
+            "manual_mouse_combo",
+        ):
+            combobox = getattr(self, combobox_name, None)
+            if combobox is not None:
+                self._style_combobox_popdown(combobox, palette)
+        self._apply_window_chrome(self.theme_name == "dark")
+        if persist:
+            self._save_app_settings()
+        self._refresh_dirty_state()
+
+    def _on_theme_selected(self):
+        reverse_map = {
+            "light": "light",
+            "dark": "dark",
+            self._t("theme_light"): "light",
+            self._t("theme_dark"): "dark",
+        }
+        self._apply_theme(reverse_map.get(self.theme_var.get(), "light"))
+
     def _load_app_settings(self):
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, "r", encoding="utf-8") as file:
                     cfg = json.load(file)
                 self.lang = cfg.get("lang", "en")
+                self.theme_name = cfg.get("theme", "light")
             except Exception:
                 self.lang = "en"
+                self.theme_name = "light"
 
     def _save_app_settings(self):
         try:
             with open(self.config_file, "w", encoding="utf-8") as file:
-                json.dump({"lang": self.lang}, file, ensure_ascii=False, indent=2)
+                json.dump({"lang": self.lang, "theme": self.theme_name}, file, ensure_ascii=False, indent=2)
         except Exception:
             pass
 
@@ -661,14 +845,9 @@ class AjazzApp(tk.Tk):
         self._busy_count = max(0, self._busy_count + (1 if busy else -1))
         state = tk.DISABLED if self._busy_count else tk.NORMAL
         widget_names = (
-            "btn_write",
+            "btn_save_page",
             "btn_refresh",
-            "apply_preset_btn",
-            "apply_modifier_btn",
-            "apply_macro_btn",
-            "write_keys_btn",
             "reset_keys_btn",
-            "save_macro_name_btn",
             "record_btn",
             "add_key_pair_btn",
             "add_mouse_pair_btn",
@@ -676,8 +855,6 @@ class AjazzApp(tk.Tk):
             "macro_move_down_btn",
             "macro_delete_btn",
             "macro_clear_btn",
-            "macro_update_delay_btn",
-            "write_macro_btn",
             "reload_macro_btn",
             "reset_macro_btn",
         )
@@ -723,6 +900,26 @@ class AjazzApp(tk.Tk):
         threading.Thread(target=runner, daemon=True).start()
 
     def _on_notebook_tab_changed(self, event=None):
+        selected = self.notebook.select()
+        if self._current_tab_id is None:
+            self._current_tab_id = selected
+        if not self._tab_change_guard and self._current_tab_id != selected:
+            previous_page = self._page_for_tab(self._current_tab_id)
+            if previous_page and self._page_is_dirty(previous_page):
+                answer = messagebox.askyesnocancel(self._t("unsaved_changes"), self._t("unsaved_prompt"))
+                if answer is None:
+                    self._tab_change_guard = True
+                    self.notebook.select(self._current_tab_id)
+                    self._tab_change_guard = False
+                    return
+                if answer:
+                    self._save_page(previous_page)
+                else:
+                    self._discard_page_changes(previous_page)
+            self._current_tab_id = selected
+        else:
+            self._current_tab_id = selected
+        self._refresh_dirty_state()
         if self.notebook.select() == str(self.tab_macro):
             self._load_macro_profiles_async()
 
@@ -732,9 +929,15 @@ class AjazzApp(tk.Tk):
         self.lbl_lang_label = ttk.Label(header)
         self.lbl_lang_label.pack(side=tk.LEFT)
         self.lang_var = tk.StringVar(value=self.lang)
-        lang_combo = ttk.Combobox(header, textvariable=self.lang_var, values=["en", "ja"], state="readonly", width=6)
-        lang_combo.pack(side=tk.LEFT, padx=6)
-        lang_combo.bind("<<ComboboxSelected>>", lambda event: self.change_language(self.lang_var.get()))
+        self.lang_combo = ttk.Combobox(header, textvariable=self.lang_var, values=["en", "ja"], state="readonly", width=6)
+        self.lang_combo.pack(side=tk.LEFT, padx=6)
+        self.lang_combo.bind("<<ComboboxSelected>>", lambda event: self.change_language(self.lang_var.get()))
+        self.lbl_theme_label = ttk.Label(header)
+        self.lbl_theme_label.pack(side=tk.LEFT, padx=(12, 0))
+        self.theme_var = tk.StringVar(value=self.theme_name)
+        self.theme_combo = ttk.Combobox(header, textvariable=self.theme_var, state="readonly", width=10)
+        self.theme_combo.pack(side=tk.LEFT, padx=6)
+        self.theme_combo.bind("<<ComboboxSelected>>", lambda _event: self._on_theme_selected())
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -758,8 +961,11 @@ class AjazzApp(tk.Tk):
 
         bottom = ttk.Frame(self)
         bottom.pack(fill=tk.X, padx=10, pady=(0, 10))
-        self.btn_write = ttk.Button(bottom, command=self._apply_config)
-        self.btn_write.pack(side=tk.RIGHT)
+        self.page_status_var = tk.StringVar(value="")
+        self.page_status_label = ttk.Label(bottom, textvariable=self.page_status_var)
+        self.page_status_label.pack(side=tk.LEFT)
+        self.btn_save_page = ttk.Button(bottom, command=self._save_current_page, style="PageSave.TButton")
+        self.btn_save_page.pack(side=tk.RIGHT)
         self.btn_refresh = ttk.Button(bottom, command=self._refresh_status)
         self.btn_refresh.pack(side=tk.RIGHT, padx=8)
 
@@ -779,42 +985,49 @@ class AjazzApp(tk.Tk):
         self.lbl_poll = ttk.Label(row1, width=24)
         self.lbl_poll.pack(side=tk.LEFT)
         self.poll_var = tk.StringVar(value="1000")
-        ttk.Combobox(row1, textvariable=self.poll_var, values=["125", "250", "500", "1000"], state="readonly").pack(side=tk.LEFT)
+        self.poll_combo = ttk.Combobox(row1, textvariable=self.poll_var, values=["125", "250", "500", "1000"], state="readonly")
+        self.poll_combo.pack(side=tk.LEFT)
 
         row2 = ttk.Frame(self.tab_perf)
         row2.pack(fill=tk.X, pady=4)
         self.lbl_debounce = ttk.Label(row2, width=24)
         self.lbl_debounce.pack(side=tk.LEFT)
         self.debounce_var = tk.StringVar(value="4")
-        ttk.Entry(row2, textvariable=self.debounce_var, width=12).pack(side=tk.LEFT)
+        self.debounce_entry = ttk.Entry(row2, textvariable=self.debounce_var, width=12)
+        self.debounce_entry.pack(side=tk.LEFT)
 
         row3 = ttk.Frame(self.tab_perf)
         row3.pack(fill=tk.X, pady=4)
         self.lbl_lod = ttk.Label(row3, width=24)
         self.lbl_lod.pack(side=tk.LEFT)
         self.lod_var = tk.StringVar(value="1mm")
-        ttk.Combobox(row3, textvariable=self.lod_var, values=["1mm", "2mm"], state="readonly").pack(side=tk.LEFT)
+        self.lod_combo = ttk.Combobox(row3, textvariable=self.lod_var, values=["1mm", "2mm"], state="readonly")
+        self.lod_combo.pack(side=tk.LEFT)
 
         self.dpi_frame = ttk.LabelFrame(self.tab_perf, padding=10)
         self.dpi_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         self.dpi_lbls = []
         self.dpi_vars = []
+        self.dpi_entries = []
         for index in range(6):
             frame = ttk.Frame(self.dpi_frame)
             frame.pack(fill=tk.X, pady=3)
             label = ttk.Label(frame, width=16)
             label.pack(side=tk.LEFT)
             value = tk.StringVar(value="400")
-            ttk.Entry(frame, textvariable=value, width=12).pack(side=tk.LEFT)
+            entry = ttk.Entry(frame, textvariable=value, width=12)
+            entry.pack(side=tk.LEFT)
             self.dpi_lbls.append(label)
             self.dpi_vars.append(value)
+            self.dpi_entries.append(entry)
 
         dpi_index_row = ttk.Frame(self.dpi_frame)
         dpi_index_row.pack(fill=tk.X, pady=6)
         self.lbl_dpi_idx = ttk.Label(dpi_index_row, width=16)
         self.lbl_dpi_idx.pack(side=tk.LEFT)
         self.dpi_idx_var = tk.StringVar(value="1")
-        ttk.Combobox(dpi_index_row, textvariable=self.dpi_idx_var, values=["1", "2", "3", "4", "5", "6"], state="readonly", width=8).pack(side=tk.LEFT)
+        self.dpi_idx_combo = ttk.Combobox(dpi_index_row, textvariable=self.dpi_idx_var, values=["1", "2", "3", "4", "5", "6"], state="readonly", width=8)
+        self.dpi_idx_combo.pack(side=tk.LEFT)
 
     def _build_sys_tab(self):
         row1 = ttk.Frame(self.tab_sys)
@@ -822,14 +1035,16 @@ class AjazzApp(tk.Tk):
         self.lbl_light = ttk.Label(row1, width=24)
         self.lbl_light.pack(side=tk.LEFT)
         self.light_var = tk.StringVar(value="0")
-        ttk.Combobox(row1, textvariable=self.light_var, values=[str(i) for i in range(8)], state="readonly").pack(side=tk.LEFT)
+        self.light_combo = ttk.Combobox(row1, textvariable=self.light_var, values=[str(i) for i in range(8)], state="readonly")
+        self.light_combo.pack(side=tk.LEFT)
 
         row2 = ttk.Frame(self.tab_sys)
         row2.pack(fill=tk.X, pady=8)
         self.lbl_sleep = ttk.Label(row2, width=24)
         self.lbl_sleep.pack(side=tk.LEFT)
         self.sleep_var = tk.StringVar(value="10")
-        ttk.Entry(row2, textvariable=self.sleep_var, width=12).pack(side=tk.LEFT)
+        self.sleep_entry = ttk.Entry(row2, textvariable=self.sleep_var, width=12)
+        self.sleep_entry.pack(side=tk.LEFT)
 
     def _build_keys_tab(self):
         left = ttk.Frame(self.tab_keys)
@@ -868,8 +1083,9 @@ class AjazzApp(tk.Tk):
         self.keyboard_preset_list = self._build_preset_list(self.keys_keyboard_tab, KEYBOARD_PRESETS)
         self.media_preset_list = self._build_preset_list(self.keys_media_tab, MEDIA_PRESETS)
         self.mouse_preset_list = self._build_preset_list(self.keys_mouse_tab, MOUSE_PRESETS)
-        self.apply_preset_btn = ttk.Button(self.keys_presets_frame, command=self._apply_selected_preset)
-        self.apply_preset_btn.pack(anchor=tk.E, pady=(8, 0))
+        for listbox in (self.keyboard_preset_list, self.media_preset_list, self.mouse_preset_list):
+            listbox.bind("<Double-Button-1>", lambda _event: self._apply_selected_preset())
+            listbox.bind("<Return>", lambda _event: self._apply_selected_preset())
 
         lower = ttk.Frame(right)
         lower.pack(fill=tk.X, pady=(10, 0))
@@ -893,8 +1109,8 @@ class AjazzApp(tk.Tk):
         self.modifier_capture_entry.pack(anchor=tk.W)
         self.modifier_capture_entry.bind("<KeyPress>", self._capture_modifier_key)
         self.captured_modifier_hid = None
-        self.apply_modifier_btn = ttk.Button(self.keys_modifier_frame, command=self._apply_modifier_combo)
-        self.apply_modifier_btn.pack(anchor=tk.E, pady=(8, 0))
+        for variable in (self.modifier_ctrl, self.modifier_shift, self.modifier_alt, self.modifier_win):
+            variable.trace_add("write", lambda *_args: self._apply_modifier_combo())
 
         self.keys_macro_frame = ttk.LabelFrame(lower, padding=8)
         self.keys_macro_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0))
@@ -910,23 +1126,23 @@ class AjazzApp(tk.Tk):
         self.macro_mode_display = {}
         self.key_macro_mode_combo = ttk.Combobox(self.keys_macro_frame, textvariable=self.key_macro_mode_var, state="readonly", width=28)
         self.key_macro_mode_combo.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=(6, 0))
-        self.key_macro_mode_combo.bind("<<ComboboxSelected>>", self._sync_macro_mode_selection)
+        self.key_macro_mode_combo.bind("<<ComboboxSelected>>", lambda _event: (self._sync_macro_mode_selection(), self._apply_macro_assignment()))
         self.key_macro_repeat_label = ttk.Label(self.keys_macro_frame)
         self.key_macro_repeat_label.grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.key_macro_repeat_var = tk.StringVar(value="1")
-        ttk.Spinbox(self.keys_macro_frame, from_=1, to=255, textvariable=self.key_macro_repeat_var, width=10).grid(row=2, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
-        self.apply_macro_btn = ttk.Button(self.keys_macro_frame, command=self._apply_macro_assignment)
-        self.apply_macro_btn.grid(row=3, column=1, sticky="e", pady=(10, 0))
+        self.key_macro_repeat_spinbox = ttk.Spinbox(self.keys_macro_frame, from_=1, to=255, textvariable=self.key_macro_repeat_var, width=10)
+        self.key_macro_repeat_spinbox.grid(row=2, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
         self.keys_macro_frame.columnconfigure(1, weight=1)
+        self.key_macro_profile_combo.bind("<<ComboboxSelected>>", lambda _event: self._apply_macro_assignment())
+        self.key_macro_repeat_spinbox.bind("<Return>", self._apply_macro_assignment)
+        self.key_macro_repeat_spinbox.bind("<FocusOut>", self._apply_macro_assignment)
 
         self.keys_device_frame = ttk.LabelFrame(right, padding=8)
         self.keys_device_frame.pack(fill=tk.X, pady=(10, 0))
         key_actions = ttk.Frame(self.keys_device_frame)
         key_actions.pack(anchor=tk.E)
-        self.write_keys_btn = ttk.Button(key_actions, command=self._write_key_mapping_to_device)
-        self.write_keys_btn.pack(side=tk.RIGHT)
         self.reset_keys_btn = ttk.Button(key_actions, command=self._reset_key_mapping_on_device)
-        self.reset_keys_btn.pack(side=tk.RIGHT, padx=(0, 8))
+        self.reset_keys_btn.pack(side=tk.RIGHT)
 
     def _build_preset_list(self, parent, presets):
         frame = ttk.Frame(parent)
@@ -997,9 +1213,8 @@ class AjazzApp(tk.Tk):
         self.macro_delay_label = ttk.Label(delay_row)
         self.macro_delay_label.pack(side=tk.LEFT)
         self.macro_delay_var = tk.StringVar(value="10")
-        ttk.Spinbox(delay_row, from_=0, to=60000, textvariable=self.macro_delay_var, width=10).pack(side=tk.LEFT, padx=6)
-        self.macro_update_delay_btn = ttk.Button(delay_row, command=self._update_selected_macro_delay)
-        self.macro_update_delay_btn.pack(side=tk.LEFT)
+        self.macro_delay_spinbox = ttk.Spinbox(delay_row, from_=0, to=60000, textvariable=self.macro_delay_var, width=10)
+        self.macro_delay_spinbox.pack(side=tk.LEFT, padx=6)
 
         self.macro_controls_frame = ttk.LabelFrame(right, padding=8)
         self.macro_controls_frame.pack(fill=tk.BOTH, expand=True)
@@ -1008,9 +1223,8 @@ class AjazzApp(tk.Tk):
         self.macro_name_label = ttk.Label(name_row)
         self.macro_name_label.pack(side=tk.LEFT)
         self.macro_name_var = tk.StringVar()
-        ttk.Entry(name_row, textvariable=self.macro_name_var, width=18).pack(side=tk.LEFT, padx=6)
-        self.save_macro_name_btn = ttk.Button(name_row, command=self._save_macro_name)
-        self.save_macro_name_btn.pack(side=tk.LEFT)
+        self.macro_name_entry = ttk.Entry(name_row, textvariable=self.macro_name_var, width=18)
+        self.macro_name_entry.pack(side=tk.LEFT, padx=6)
         self.record_btn = ttk.Button(self.macro_controls_frame, command=self._toggle_recording)
         self.record_btn.pack(fill=tk.X, pady=(10, 0))
 
@@ -1035,34 +1249,51 @@ class AjazzApp(tk.Tk):
         self.manual_key_label.pack(anchor=tk.W)
         self.manual_key_map = dict(KEYBOARD_NAME_TO_CODE)
         self.manual_key_var = tk.StringVar(value=KEYBOARD_PRESETS[0]["name"])
-        ttk.Combobox(self.macro_controls_frame, textvariable=self.manual_key_var, values=list(self.manual_key_map.keys()), state="readonly", width=20).pack(fill=tk.X, pady=(2, 4))
+        self.manual_key_combo = ttk.Combobox(self.macro_controls_frame, textvariable=self.manual_key_var, values=list(self.manual_key_map.keys()), state="readonly", width=20)
+        self.manual_key_combo.pack(fill=tk.X, pady=(2, 4))
         self.add_key_pair_btn = ttk.Button(self.macro_controls_frame, command=self._add_manual_key_pair)
         self.add_key_pair_btn.pack(fill=tk.X)
         self.manual_mouse_label = ttk.Label(self.macro_controls_frame)
         self.manual_mouse_label.pack(anchor=tk.W, pady=(10, 0))
         self.manual_mouse_map = dict(MOUSE_NAME_TO_CODE)
         self.manual_mouse_var = tk.StringVar(value="Mouse L")
-        ttk.Combobox(self.macro_controls_frame, textvariable=self.manual_mouse_var, values=list(self.manual_mouse_map.keys()), state="readonly", width=20).pack(fill=tk.X, pady=(2, 4))
+        self.manual_mouse_combo = ttk.Combobox(self.macro_controls_frame, textvariable=self.manual_mouse_var, values=list(self.manual_mouse_map.keys()), state="readonly", width=20)
+        self.manual_mouse_combo.pack(fill=tk.X, pady=(2, 4))
         self.add_mouse_pair_btn = ttk.Button(self.macro_controls_frame, command=self._add_manual_mouse_pair)
         self.add_mouse_pair_btn.pack(fill=tk.X)
 
         ttk.Separator(self.macro_controls_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
         self.macro_device_frame = ttk.LabelFrame(self.macro_controls_frame, padding=6)
         self.macro_device_frame.pack(fill=tk.X)
-        self.write_macro_btn = ttk.Button(self.macro_device_frame, command=self._write_macros_to_device)
-        self.write_macro_btn.pack(fill=tk.X)
         self.reload_macro_btn = ttk.Button(self.macro_device_frame, command=lambda: self._load_macro_profiles_async(force=True))
-        self.reload_macro_btn.pack(fill=tk.X, pady=(6, 0))
+        self.reload_macro_btn.pack(fill=tk.X)
         self.reset_macro_btn = ttk.Button(self.macro_device_frame, command=self._reset_macro_data_on_device)
         self.reset_macro_btn.pack(fill=tk.X, pady=(6, 0))
 
         self._set_macro_status("idle")
         self._set_macro_progress(0, 0)
         self._hide_macro_progress()
+        self.macro_name_var.trace_add("write", lambda *_args: self._on_macro_name_changed())
+        self.macro_delay_spinbox.bind("<Return>", lambda _event: self._update_selected_macro_delay())
+        self.macro_delay_spinbox.bind("<FocusOut>", lambda _event: self._update_selected_macro_delay())
 
     def _build_debug_tab(self):
-        self.log_txt = scrolledtext.ScrolledText(self.tab_debug, wrap=tk.WORD, state="disabled", font=("Consolas", 10))
-        self.log_txt.pack(fill=tk.BOTH, expand=True)
+        debug_frame = tk.Frame(self.tab_debug, bd=0, highlightthickness=0)
+        debug_frame.pack(fill=tk.BOTH, expand=True)
+        self.log_scrollbar = tk.Scrollbar(debug_frame, orient=tk.VERTICAL)
+        self.log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_txt = tk.Text(
+            debug_frame,
+            wrap=tk.WORD,
+            state="disabled",
+            font=("Consolas", 10),
+            yscrollcommand=self.log_scrollbar.set,
+            bd=0,
+            highlightthickness=0,
+            relief=tk.FLAT,
+        )
+        self.log_txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.log_scrollbar.configure(command=self.log_txt.yview)
 
     def change_language(self, new_lang, skip_ui_update=False):
         self.lang = new_lang
@@ -1081,7 +1312,9 @@ class AjazzApp(tk.Tk):
         for tab, key in zip(labels, keys):
             self.notebook.tab(tab, text=self._t(key))
         self.lbl_lang_label.config(text=self._t("lang_label"))
-        self.btn_write.config(text=self._t("btn_write"))
+        self.lbl_theme_label.config(text=self._t("theme_label"))
+        self.theme_combo["values"] = ["light", "dark"] if self.lang == "en" else [self._t("theme_light"), self._t("theme_dark")]
+        self.theme_var.set(self.theme_name if self.lang == "en" else self._t(f"theme_{self.theme_name}"))
         self.btn_refresh.config(text=self._t("btn_refresh"))
         self.status_frame.config(text=self._t("status_frame"))
         self.lbl_poll.config(text=self._t("poll_rate"))
@@ -1104,14 +1337,10 @@ class AjazzApp(tk.Tk):
         self.keys_preset_notebook.tab(self.keys_keyboard_tab, text=self._t("keys_keyboard"))
         self.keys_preset_notebook.tab(self.keys_media_tab, text=self._t("keys_media"))
         self.keys_preset_notebook.tab(self.keys_mouse_tab, text=self._t("keys_mouse"))
-        self.apply_preset_btn.config(text=self._t("keys_apply_preset"))
         self.capture_hint_label.config(text=self._t("keys_capture"))
-        self.apply_modifier_btn.config(text=self._t("keys_apply_modifier"))
         self.key_macro_profile_label.config(text=self._t("keys_macro_profile"))
         self.key_macro_mode_label.config(text=self._t("keys_macro_mode"))
         self.key_macro_repeat_label.config(text=self._t("keys_macro_repeat"))
-        self.apply_macro_btn.config(text=self._t("keys_apply_macro"))
-        self.write_keys_btn.config(text=self._t("keys_write"))
         self.reset_keys_btn.config(text=self._t("keys_reset"))
 
         self.macro_profiles_frame.config(text=self._t("macro_profiles"))
@@ -1121,7 +1350,6 @@ class AjazzApp(tk.Tk):
         self.macro_edit_hint_label.config(text=self._ui_text("macro_edit_hint"))
         self.macro_device_frame.config(text=self._ui_text("macro_device_actions"))
         self.macro_name_label.config(text=self._t("macro_name"))
-        self.save_macro_name_btn.config(text=self._t("macro_save_name"))
         self.delay_mode_frame.config(text=self._t("macro_delay_mode"))
         self.delay_exact_radio.config(text=self._t("macro_delay_exact"))
         self.delay_none_radio.config(text=self._t("macro_delay_none"))
@@ -1136,8 +1364,6 @@ class AjazzApp(tk.Tk):
         self.macro_delete_btn.config(text=self._t("macro_delete"))
         self.macro_clear_btn.config(text=self._t("macro_clear"))
         self.macro_delay_label.config(text=self._t("macro_delay"))
-        self.macro_update_delay_btn.config(text=self._t("macro_update_delay"))
-        self.write_macro_btn.config(text=self._t("macro_write"))
         self.reload_macro_btn.config(text=self._t("macro_reload"))
         self.reset_macro_btn.config(text=self._t("macro_reset"))
         self._set_macro_status(self._macro_status_key)
@@ -1157,6 +1383,7 @@ class AjazzApp(tk.Tk):
         self._refresh_key_mapping_ui()
         self._refresh_macro_profile_list()
         self._refresh_macro_events()
+        self._refresh_dirty_state()
         if not skip_ui_update:
             self._refresh_status()
 
@@ -1170,6 +1397,151 @@ class AjazzApp(tk.Tk):
         self.dpi_idx_var.set(str(cfg["dpi_index"] + 1))
         for index, value in enumerate(cfg["dpis"]):
             self.dpi_vars[index].set(str(value))
+
+    def _saved_perf_snapshot(self):
+        if not self.current_config:
+            return None
+        return {
+            "poll": {0: "125", 1: "250", 2: "500", 3: "1000"}.get(self.current_config["report_rate_idx"], "1000"),
+            "debounce": str(self.current_config["key_respond"]),
+            "lod": {1: "1mm", 2: "2mm"}.get(self.current_config["lod_value"], "1mm"),
+            "dpi_index": str(self.current_config["dpi_index"] + 1),
+            "dpis": [str(value) for value in self.current_config["dpis"]],
+        }
+
+    def _current_perf_snapshot(self):
+        return {
+            "poll": self.poll_var.get(),
+            "debounce": self.debounce_var.get(),
+            "lod": self.lod_var.get(),
+            "dpi_index": self.dpi_idx_var.get(),
+            "dpis": [var.get() for var in self.dpi_vars],
+        }
+
+    def _saved_sys_snapshot(self):
+        if not self.current_config:
+            return None
+        return {
+            "light": str(self.current_config["light_mode"]),
+            "sleep": str(self.current_config["sleep_light"]),
+        }
+
+    def _current_sys_snapshot(self):
+        return {
+            "light": self.light_var.get(),
+            "sleep": self.sleep_var.get(),
+        }
+
+    def _page_is_dirty(self, page):
+        if page == "perf":
+            saved = self._saved_perf_snapshot()
+            return bool(saved and saved != self._current_perf_snapshot())
+        if page == "sys":
+            saved = self._saved_sys_snapshot()
+            return bool(saved and saved != self._current_sys_snapshot())
+        if page == "keys":
+            return self.mouse_keys != self._saved_mouse_keys
+        if page == "macro":
+            return self.macro_profiles != self._saved_macro_profiles
+        return False
+
+    def _page_for_tab(self, tab_id):
+        mapping = {
+            str(self.tab_perf): "perf",
+            str(self.tab_sys): "sys",
+            str(self.tab_keys): "keys",
+            str(self.tab_macro): "macro",
+        }
+        return mapping.get(tab_id)
+
+    def _set_field_dirty_style(self, widget, dirty, widget_type):
+        if widget is None:
+            return
+        styles = {
+            "entry": ("TEntry", "Dirty.TEntry"),
+            "combo": ("TCombobox", "Dirty.TCombobox"),
+            "button": ("TButton", "Dirty.TButton"),
+            "label": ("Clean.TLabel", "Dirty.TLabel"),
+        }
+        normal_style, dirty_style = styles[widget_type]
+        widget.configure(style=dirty_style if dirty else normal_style)
+
+    def _refresh_dirty_state(self):
+        perf_saved = self._saved_perf_snapshot()
+        perf_current = self._current_perf_snapshot()
+        if perf_saved:
+            self._set_field_dirty_style(self.poll_combo, perf_current["poll"] != perf_saved["poll"], "combo")
+            self._set_field_dirty_style(self.debounce_entry, perf_current["debounce"] != perf_saved["debounce"], "entry")
+            self._set_field_dirty_style(self.lod_combo, perf_current["lod"] != perf_saved["lod"], "combo")
+            self._set_field_dirty_style(self.dpi_idx_combo, perf_current["dpi_index"] != perf_saved["dpi_index"], "combo")
+            for index, entry in enumerate(self.dpi_entries):
+                self._set_field_dirty_style(entry, perf_current["dpis"][index] != perf_saved["dpis"][index], "entry")
+
+        sys_saved = self._saved_sys_snapshot()
+        sys_current = self._current_sys_snapshot()
+        if sys_saved:
+            self._set_field_dirty_style(self.light_combo, sys_current["light"] != sys_saved["light"], "combo")
+            self._set_field_dirty_style(self.sleep_entry, sys_current["sleep"] != sys_saved["sleep"], "entry")
+
+        dirty_slots = {index for index, (current, saved) in enumerate(zip(self.mouse_keys, self._saved_mouse_keys)) if current != saved}
+        for index, button in enumerate(self.key_slot_buttons):
+            self._set_field_dirty_style(button, index in dirty_slots, "button")
+
+        self.macro_profile_listbox.selection_clear(0, tk.END)
+        for index, _profile in enumerate(self.macro_profiles):
+            if index < self.macro_profile_listbox.size():
+                changed = index < len(self._saved_macro_profiles) and self.macro_profiles[index] != self._saved_macro_profiles[index]
+                palette = getattr(self, "_theme_palette", {"dirty": "#fff4cc", "field": "#ffffff", "fg": "#1d1d1f"})
+                self.macro_profile_listbox.itemconfig(index, bg=palette["dirty"] if changed else palette["field"], fg=palette["fg"])
+        if self.macro_profiles:
+            self.macro_profile_listbox.selection_set(self.selected_macro_slot)
+
+        current_page = self._page_for_tab(self.notebook.select())
+        if current_page and self._page_is_dirty(current_page):
+            self.page_status_var.set(self._t("dirty_hint"))
+            self._set_field_dirty_style(self.page_status_label, True, "label")
+        else:
+            self.page_status_var.set(self._t("clean_hint"))
+            self._set_field_dirty_style(self.page_status_label, False, "label")
+
+        save_key = {
+            "perf": "save_perf",
+            "sys": "save_sys",
+            "keys": "save_keys",
+            "macro": "save_macro",
+        }.get(current_page, "save_page")
+        self.btn_save_page.config(text=self._t(save_key))
+        if current_page in {"perf", "sys", "keys", "macro"}:
+            self.btn_save_page.config(state=tk.NORMAL)
+        else:
+            self.btn_save_page.config(state=tk.DISABLED)
+
+    def _discard_page_changes(self, page):
+        if page == "perf" and self.current_config:
+            self._load_config_to_ui()
+        elif page == "sys" and self.current_config:
+            self._load_config_to_ui()
+        elif page == "keys":
+            self.mouse_keys = [clone_binding(binding) for binding in self._saved_mouse_keys]
+            self._refresh_key_mapping_ui()
+        elif page == "macro":
+            self.macro_profiles = deepcopy(self._saved_macro_profiles)
+            self._refresh_macro_profile_list()
+            self._refresh_macro_events()
+            self.mouse_keys = [clone_binding(binding, name=resolve_binding_name(binding, self.macro_profiles)) for binding in self.mouse_keys]
+            self._refresh_key_mapping_ui()
+        self._refresh_dirty_state()
+
+    def _save_current_page(self):
+        page = self._page_for_tab(self.notebook.select())
+        if page == "perf":
+            self._save_perf_page()
+        elif page == "sys":
+            self._save_sys_page()
+        elif page == "keys":
+            self._write_key_mapping_to_device()
+        elif page == "macro":
+            self._write_macros_to_device()
 
     def _merge_macro_names(self, profiles: list[MacroProfile]):
         names = self._macro_metadata.get("names", {})
@@ -1241,7 +1613,9 @@ class AjazzApp(tk.Tk):
             if self.current_config:
                 self._load_config_to_ui()
             self.mouse_keys = [clone_binding(binding, name=resolve_binding_name(binding, self.macro_profiles)) for binding in result["keys"]]
+            self._saved_mouse_keys = [clone_binding(binding) for binding in self.mouse_keys]
             self._refresh_key_mapping_ui()
+            self._refresh_dirty_state()
 
             if self.notebook.select() == str(self.tab_macro):
                 self._load_macro_profiles_async()
@@ -1285,10 +1659,12 @@ class AjazzApp(tk.Tk):
             self._set_macro_progress(self._macro_progress_total, self._macro_progress_total)
             self._hide_macro_progress()
             self.macro_profiles = profiles
+            self._saved_macro_profiles = deepcopy(profiles)
             self._refresh_macro_profile_list()
             self._refresh_macro_events()
             self.mouse_keys = [clone_binding(binding, name=resolve_binding_name(binding, self.macro_profiles)) for binding in self.mouse_keys]
             self._refresh_key_mapping_ui()
+            self._refresh_dirty_state()
             if log:
                 self._append_log("System: Macro profiles loaded from device.")
 
@@ -1305,9 +1681,11 @@ class AjazzApp(tk.Tk):
         try:
             self.macro_profiles = self._merge_macro_names(decode_macro_profiles(self.mouse.get_macro_data(), resolve_macro_event_name))
             self._macro_profiles_loaded = True
+            self._saved_macro_profiles = deepcopy(self.macro_profiles)
             self._set_macro_status("ready")
             self._refresh_macro_profile_list()
             self._refresh_macro_events()
+            self._refresh_dirty_state()
             if log:
                 self._append_log("System: Macro profiles loaded from device.")
         except Exception as exc:
@@ -1328,6 +1706,7 @@ class AjazzApp(tk.Tk):
     def _select_button_slot(self, index):
         self.selected_button_index = index
         self._refresh_key_mapping_ui()
+        self._refresh_dirty_state()
 
     def _selected_binding(self):
         return self.mouse_keys[self.selected_button_index]
@@ -1352,6 +1731,7 @@ class AjazzApp(tk.Tk):
         self.key_macro_profile_combo["values"] = [profile.name for profile in self.macro_profiles]
         if self.macro_profiles and self.key_macro_profile_combo.current() < 0:
             self.key_macro_profile_combo.current(0)
+        self._refresh_dirty_state()
 
     def _selected_preset(self):
         current_tab = self.keys_preset_notebook.index(self.keys_preset_notebook.select())
@@ -1377,6 +1757,7 @@ class AjazzApp(tk.Tk):
             lang=preset["lang"],
         )
         self._refresh_key_mapping_ui()
+        self._refresh_dirty_state()
 
     def _capture_modifier_key(self, event):
         keysym = event.keysym
@@ -1393,6 +1774,7 @@ class AjazzApp(tk.Tk):
             return "break"
         self.captured_modifier_hid = hid
         self.modifier_capture_var.set(HID_KEY_NAMES.get(hid, f"Key {hid}"))
+        self._apply_modifier_combo()
         return "break"
 
     def _apply_modifier_combo(self):
@@ -1409,12 +1791,13 @@ class AjazzApp(tk.Tk):
             code3=0,
         )
         self._refresh_key_mapping_ui()
+        self._refresh_dirty_state()
 
     def _sync_macro_mode_selection(self, event=None):
         reverse_map = {label: code for code, label in self.macro_mode_display.items()}
         self.key_macro_mode_code.set(reverse_map.get(self.key_macro_mode_var.get(), 0))
 
-    def _apply_macro_assignment(self):
+    def _apply_macro_assignment(self, event=None):
         slot = self.key_macro_profile_combo.current()
         if slot < 0:
             slot = 0
@@ -1428,6 +1811,7 @@ class AjazzApp(tk.Tk):
             code3=int(self.key_macro_mode_code.get()),
         )
         self._refresh_key_mapping_ui()
+        self._refresh_dirty_state()
 
     def _write_key_mapping_to_device(self):
         if not self.mouse.device:
@@ -1439,10 +1823,13 @@ class AjazzApp(tk.Tk):
             self.mouse.set_mouse_keys(self.mouse_keys)
             return None
 
-        self._run_in_background(
-            worker,
-            on_success=lambda _: (self._append_log("System: Key mapping written."), messagebox.showinfo("OK", self._t("keys_write_ok"))),
-        )
+        def on_success(_):
+            self._saved_mouse_keys = [clone_binding(binding) for binding in self.mouse_keys]
+            self._refresh_dirty_state()
+            self._append_log("System: Key mapping written.")
+            messagebox.showinfo("OK", self._t("keys_write_ok"))
+
+        self._run_in_background(worker, on_success=on_success)
 
     def _reset_key_mapping_on_device(self):
         if not self.mouse.device:
@@ -1458,7 +1845,9 @@ class AjazzApp(tk.Tk):
 
         def on_success(bindings):
             self.mouse_keys = [clone_binding(binding, name=resolve_binding_name(binding, self.macro_profiles)) for binding in bindings]
+            self._saved_mouse_keys = [clone_binding(binding) for binding in self.mouse_keys]
             self._refresh_key_mapping_ui()
+            self._refresh_dirty_state()
             self._append_log("System: Key mapping loaded from device.")
 
         self._run_in_background(worker, on_success=on_success)
@@ -1549,6 +1938,7 @@ class AjazzApp(tk.Tk):
         self.selected_macro_event_index = index
         self._close_macro_editor()
         self._refresh_macro_events()
+        self._refresh_dirty_state()
 
     def _on_macro_tree_double_click(self, event):
         self._close_macro_editor()
@@ -1604,14 +1994,14 @@ class AjazzApp(tk.Tk):
         editor.bind("<FocusOut>", lambda _event: self.after(0, self._commit_macro_editor))
         editor.focus_set()
 
-    def _save_macro_name(self):
+    def _on_macro_name_changed(self):
         name = self.macro_name_var.get().strip() or f"Macro {self.selected_macro_slot + 1}"
         self.macro_profiles[self.selected_macro_slot].name = name
         self._macro_metadata.setdefault("names", {})[str(self.selected_macro_slot)] = name
-        self._save_macro_metadata()
         self._refresh_macro_profile_list()
         self.mouse_keys = [clone_binding(binding, name=resolve_binding_name(binding, self.macro_profiles)) for binding in self.mouse_keys]
         self._refresh_key_mapping_ui()
+        self._refresh_dirty_state()
 
     def _selected_profile(self):
         return self.macro_profiles[self.selected_macro_slot]
@@ -1621,6 +2011,7 @@ class AjazzApp(tk.Tk):
         self.selected_macro_event_index = len(self._selected_profile().list) - 1
         self._refresh_macro_profile_list()
         self._refresh_macro_events()
+        self._refresh_dirty_state()
 
     def _add_event_pair(self, name, code, event_type):
         self._append_event_to_profile(MacroEvent(name=name, code=code, type=event_type, action=ACTION_PRESS, delay=10))
@@ -1644,6 +2035,7 @@ class AjazzApp(tk.Tk):
         profile.list[index - 1], profile.list[index] = profile.list[index], profile.list[index - 1]
         self.selected_macro_event_index -= 1
         self._refresh_macro_events()
+        self._refresh_dirty_state()
 
     def _move_macro_event_down(self):
         profile = self._selected_profile()
@@ -1653,6 +2045,7 @@ class AjazzApp(tk.Tk):
         profile.list[index + 1], profile.list[index] = profile.list[index], profile.list[index + 1]
         self.selected_macro_event_index += 1
         self._refresh_macro_events()
+        self._refresh_dirty_state()
 
     def _delete_macro_event(self):
         profile = self._selected_profile()
@@ -1663,12 +2056,14 @@ class AjazzApp(tk.Tk):
         self.selected_macro_event_index = None if not profile.list else min(index, len(profile.list) - 1)
         self._refresh_macro_profile_list()
         self._refresh_macro_events()
+        self._refresh_dirty_state()
 
     def _clear_macro_profile(self):
         self._selected_profile().list = []
         self.selected_macro_event_index = None
         self._refresh_macro_profile_list()
         self._refresh_macro_events()
+        self._refresh_dirty_state()
 
     def _update_selected_macro_delay(self):
         index = self.selected_macro_event_index
@@ -1676,6 +2071,7 @@ class AjazzApp(tk.Tk):
         if index is not None and index < len(profile.list):
             profile.list[index].delay = max(0, int(self.macro_delay_var.get() or "0"))
             self._refresh_macro_events()
+            self._refresh_dirty_state()
 
     def _record_delay_value(self, now_ms):
         if self.record_delay_mode.get() == "none":
@@ -1694,6 +2090,7 @@ class AjazzApp(tk.Tk):
         self.selected_macro_event_index = len(profile.list) - 1
         self._refresh_macro_profile_list()
         self._refresh_macro_events()
+        self._refresh_dirty_state()
 
     def _event_target_allows_record(self, widget):
         return widget.winfo_class() not in {"TButton", "Button", "TCombobox", "Combobox", "Treeview", "Listbox"}
@@ -1786,7 +2183,9 @@ class AjazzApp(tk.Tk):
         def on_success(_):
             self._save_macro_metadata()
             self._macro_profiles_loaded = True
+            self._saved_macro_profiles = deepcopy(self.macro_profiles)
             self._set_macro_status("ready")
+            self._refresh_dirty_state()
             self._append_log("System: Macro data written.")
             messagebox.showinfo("OK", self._t("macro_write_ok"))
 
@@ -1808,29 +2207,58 @@ class AjazzApp(tk.Tk):
         def on_success(profiles):
             self.macro_profiles = profiles
             self._macro_profiles_loaded = True
+            self._saved_macro_profiles = deepcopy(profiles)
             self._set_macro_status("ready")
             self._refresh_macro_profile_list()
             self._refresh_macro_events()
             self.mouse_keys = [clone_binding(binding, name=resolve_binding_name(binding, self.macro_profiles)) for binding in self.mouse_keys]
             self._refresh_key_mapping_ui()
+            self._refresh_dirty_state()
             self._append_log("System: Macro profiles loaded from device.")
 
         self._run_in_background(worker, on_success=on_success)
 
-    def _apply_config(self):
+    def _save_page(self, page):
+        if page == "perf":
+            self._save_perf_page()
+        elif page == "sys":
+            self._save_sys_page()
+        elif page == "keys":
+            self._write_key_mapping_to_device()
+        elif page == "macro":
+            self._write_macros_to_device()
+
+    def _save_perf_page(self):
         if not self.mouse.device or not self.current_config:
             messagebox.showerror("Error", self._t("msg_err_conn"))
             return
-        cfg = self.current_config
+        cfg = deepcopy(self.current_config)
         cfg["report_rate_idx"] = {"125": 0, "250": 1, "500": 2, "1000": 3}.get(self.poll_var.get(), 3)
         cfg["key_respond"] = int(self.debounce_var.get() or "4")
         cfg["lod_value"] = 1 if self.lod_var.get() == "1mm" else 2
         cfg["dpi_index"] = int(self.dpi_idx_var.get() or "1") - 1
-        cfg["sleep_light"] = int(self.sleep_var.get() or "10")
-        cfg["light_mode"] = int(self.light_var.get() or "0")
         cfg["dpis"] = [max(50, int(var.get() or "400")) for var in self.dpi_vars]
         self._append_log(self._t("log_sys_writing"))
-        self._run_in_background(
-            lambda: self.mouse.set_config(cfg),
-            on_success=lambda _: messagebox.showinfo("OK", self._t("msg_success")),
-        )
+
+        def on_success(_):
+            self.current_config = cfg
+            self._refresh_dirty_state()
+            messagebox.showinfo("OK", self._t("msg_success"))
+
+        self._run_in_background(lambda: self.mouse.set_config(cfg), on_success=on_success)
+
+    def _save_sys_page(self):
+        if not self.mouse.device or not self.current_config:
+            messagebox.showerror("Error", self._t("msg_err_conn"))
+            return
+        cfg = deepcopy(self.current_config)
+        cfg["sleep_light"] = int(self.sleep_var.get() or "10")
+        cfg["light_mode"] = int(self.light_var.get() or "0")
+        self._append_log(self._t("log_sys_writing"))
+
+        def on_success(_):
+            self.current_config = cfg
+            self._refresh_dirty_state()
+            messagebox.showinfo("OK", self._t("msg_success"))
+
+        self._run_in_background(lambda: self.mouse.set_config(cfg), on_success=on_success)
