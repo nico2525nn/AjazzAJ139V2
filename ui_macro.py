@@ -66,7 +66,7 @@ class MacroTab:
         top = ctk.CTkFrame(self.frame, fg_color="transparent")
         top.pack(fill="x", pady=(0, 20))
         
-        self.macro_title_label = ctk.CTkLabel(top, text="Macro Config", font=self.app.font_title, text_color="#2dd4bf")
+        self.macro_title_label = ctk.CTkLabel(top, text="Macro Config", font=self.app.font_title, text_color=("#0ea5a5", "#2dd4bf"))
         self.macro_title_label.pack(anchor="w")
 
         self.macro_hint_label = ctk.CTkLabel(top, text="", justify="left", font=self.app.font_small, text_color="gray50")
@@ -97,11 +97,11 @@ class MacroTab:
         right.grid(row=0, column=2, sticky="nsew")
 
         # ── 左: プロファイルリスト ──
-        self.macro_profiles_frame = ctk.CTkFrame(left)
+        self.macro_profiles_frame = ctk.CTkFrame(left, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
         self.macro_profiles_frame.pack(fill="both", expand=True)
         
-        self.macro_profiles_title = ctk.CTkLabel(self.macro_profiles_frame, text="Macro Slots", font=self.app.font_heading, text_color="#2dd4bf")
-        self.macro_profiles_title.pack(anchor="w", padx=10, pady=(10, 5))
+        self.macro_profiles_title = ctk.CTkLabel(self.macro_profiles_frame, text="Macro Slots", font=self.app.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
+        self.macro_profiles_title.pack(anchor="w", padx=15, pady=(15, 5))
         
         # TK Listbox inside CTkFrame
         list_container = ctk.CTkFrame(self.macro_profiles_frame, fg_color="transparent")
@@ -119,11 +119,11 @@ class MacroTab:
         self.macro_profile_listbox.bind("<<ListboxSelect>>", self._on_macro_profile_selected)
 
         # ── 中央: イベントツリー ──
-        self.macro_events_frame = ctk.CTkFrame(center)
+        self.macro_events_frame = ctk.CTkFrame(center, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
         self.macro_events_frame.pack(fill="both", expand=True)
         
-        self.macro_events_title = ctk.CTkLabel(self.macro_events_frame, text="Events", font=self.app.font_heading, text_color="#2dd4bf")
-        self.macro_events_title.pack(anchor="w", padx=10, pady=(10, 5))
+        self.macro_events_title = ctk.CTkLabel(self.macro_events_frame, text="Events", font=self.app.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
+        self.macro_events_title.pack(anchor="w", padx=15, pady=(15, 5))
 
         tree_container = ctk.CTkFrame(self.macro_events_frame, fg_color="transparent")
         tree_container.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -152,13 +152,13 @@ class MacroTab:
         event_actions = ctk.CTkFrame(self.macro_events_frame, fg_color="transparent")
         event_actions.pack(fill="x", padx=10, pady=(0, 10))
         
-        self.macro_move_up_btn = ctk.CTkButton(event_actions, text="▲ Up", font=self.app.font_main, width=70, command=self._move_event_up)
+        self.macro_move_up_btn = ctk.CTkButton(event_actions, text="▲ Up", font=self.app.font_main, corner_radius=16, width=70, command=self._move_event_up)
         self.macro_move_up_btn.pack(side="left")
-        self.macro_move_down_btn = ctk.CTkButton(event_actions, text="▼ Down", font=self.app.font_main, width=70, command=self._move_event_down)
+        self.macro_move_down_btn = ctk.CTkButton(event_actions, text="▼ Down", font=self.app.font_main, corner_radius=16, width=70, command=self._move_event_down)
         self.macro_move_down_btn.pack(side="left", padx=5)
-        self.macro_delete_btn = ctk.CTkButton(event_actions, text="Delete", font=self.app.font_main, width=70, command=self._delete_event, fg_color="#b91c1c", hover_color="#991b1b")
+        self.macro_delete_btn = ctk.CTkButton(event_actions, text="Delete", font=self.app.font_main, corner_radius=16, width=70, command=self._delete_event, fg_color="#b91c1c", hover_color="#991b1b")
         self.macro_delete_btn.pack(side="left", padx=5)
-        self.macro_clear_btn = ctk.CTkButton(event_actions, text="Clear", font=self.app.font_main, width=70, command=self._clear_profile, fg_color="gray30", hover_color="gray40")
+        self.macro_clear_btn = ctk.CTkButton(event_actions, text="Clear", font=self.app.font_main, corner_radius=16, width=70, command=self._clear_profile, fg_color=("#d1d5db", "gray30"), hover_color=("#f3f4f6", "gray40"), text_color=("black", "white"))
         self.macro_clear_btn.pack(side="left", padx=5)
 
         # 遅延更新行
@@ -172,11 +172,11 @@ class MacroTab:
         self.macro_delay_entry.bind("<FocusOut>", lambda _e: self._update_selected_macro_delay())
 
         # ── 右: コントロールパネル ──
-        self.macro_controls_frame = ctk.CTkFrame(right, width=280)
+        self.macro_controls_frame = ctk.CTkFrame(right, width=280, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
         self.macro_controls_frame.pack(fill="both", expand=True)
         
-        self.macro_controls_title = ctk.CTkLabel(self.macro_controls_frame, text="Recorder / Editor", font=self.app.font_heading, text_color="#2dd4bf")
-        self.macro_controls_title.pack(anchor="w", padx=10, pady=(10, 5))
+        self.macro_controls_title = ctk.CTkLabel(self.macro_controls_frame, text="Recorder / Editor", font=self.app.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
+        self.macro_controls_title.pack(anchor="w", padx=15, pady=(15, 5))
 
         # 名前行
         name_row = ctk.CTkFrame(self.macro_controls_frame, fg_color="transparent")
@@ -189,8 +189,8 @@ class MacroTab:
         self.record_btn = ctk.CTkButton(
             self.macro_controls_frame,
             text="",
-            font=self.app.font_button,
-            fg_color="#0369a1", hover_color="#0284c7", text_color="white",
+            font=self.app.font_button, corner_radius=20, height=40,
+            fg_color="#0ea5a5", hover_color="#0d8a8a", text_color="white",
             command=self._toggle_recording,
         )
         self.record_btn.pack(fill="x", padx=10, pady=15)
@@ -221,23 +221,23 @@ class MacroTab:
         self.manual_key_label.pack(anchor="w")
         self.manual_key_combo = ctk.CTkOptionMenu(man_frame, variable=self.manual_key_var, values=list(self.manual_key_map.keys()), font=self.app.font_main)
         self.manual_key_combo.pack(fill="x", pady=(2, 5))
-        self.add_key_pair_btn = ctk.CTkButton(man_frame, text="Add Key Pair", font=self.app.font_main, command=self._add_manual_key_pair, fg_color="gray30", hover_color="gray40")
+        self.add_key_pair_btn = ctk.CTkButton(man_frame, text="Add Key Pair", font=self.app.font_main, corner_radius=16, command=self._add_manual_key_pair, fg_color=("#d1d5db", "gray30"), hover_color=("#f3f4f6", "gray40"), text_color=("black", "white"))
         self.add_key_pair_btn.pack(fill="x")
         
         self.manual_mouse_label = ctk.CTkLabel(man_frame, text="Manual mouse pair:", font=self.app.font_main)
         self.manual_mouse_label.pack(anchor="w", pady=(15, 0))
         self.manual_mouse_combo = ctk.CTkOptionMenu(man_frame, variable=self.manual_mouse_var, values=list(self.manual_mouse_map.keys()), font=self.app.font_main)
         self.manual_mouse_combo.pack(fill="x", pady=(2, 5))
-        self.add_mouse_pair_btn = ctk.CTkButton(man_frame, text="Add Mouse Pair", font=self.app.font_main, command=self._add_manual_mouse_pair, fg_color="gray30", hover_color="gray40")
+        self.add_mouse_pair_btn = ctk.CTkButton(man_frame, text="Add Mouse Pair", font=self.app.font_main, corner_radius=16, command=self._add_manual_mouse_pair, fg_color=("#d1d5db", "gray30"), hover_color=("#f3f4f6", "gray40"), text_color=("black", "white"))
         self.add_mouse_pair_btn.pack(fill="x")
 
         # デバイス操作
         dev_frame = ctk.CTkFrame(self.macro_controls_frame, fg_color="transparent")
         dev_frame.pack(fill="x", padx=10, pady=(20, 10))
         
-        self.reload_macro_btn = ctk.CTkButton(dev_frame, text="Reload From Device", font=self.app.font_button, command=lambda: self.app._load_macro_profiles_async(force=True))
+        self.reload_macro_btn = ctk.CTkButton(dev_frame, text="Reload From Device", font=self.app.font_button, corner_radius=20, height=36, fg_color=("#0ea5a5", "#2dd4bf"), hover_color=("#0d8a8a", "#5eead4"), text_color="white", command=lambda: self.app._load_macro_profiles_async(force=True))
         self.reload_macro_btn.pack(fill="x")
-        self.reset_macro_btn = ctk.CTkButton(dev_frame, text="Reset Macro Memory", font=self.app.font_button, fg_color="#b91c1c", hover_color="#991b1b", command=self._reset_macro_data_on_device)
+        self.reset_macro_btn = ctk.CTkButton(dev_frame, text="Reset Macro Memory", font=self.app.font_button, corner_radius=20, height=36, fg_color="#b91c1c", hover_color="#991b1b", text_color="white", command=self._reset_macro_data_on_device)
         self.reset_macro_btn.pack(fill="x", pady=(10, 0))
 
         self._hide_progress()
@@ -654,7 +654,7 @@ class MacroTab:
             for seq in ("<ButtonRelease-1>", "<ButtonRelease-2>", "<ButtonRelease-3>"):
                 self.app.bind_all(seq, self.handle_record_mouse_release)
         else:
-            self.record_btn.configure(fg_color="#0369a1", hover_color="#0284c7")
+            self.record_btn.configure(fg_color="#0ea5a5", hover_color="#0d8a8a")
             for seq in (
                 "<KeyPress>", "<KeyRelease>",
                 "<ButtonPress-1>", "<ButtonPress-2>", "<ButtonPress-3>",

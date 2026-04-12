@@ -60,10 +60,10 @@ class KeyMappingTab:
         right.grid(row=0, column=1, sticky="nsew")
 
         # ── 左: ボタンスロット ──
-        self.keys_slot_frame_title = ctk.CTkLabel(left, text="Button Slots", font=self.app.font_heading, text_color="#2dd4bf")
+        self.keys_slot_frame_title = ctk.CTkLabel(left, text="Button Slots", font=self.app.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
         self.keys_slot_frame_title.pack(anchor="w", pady=(0, 10))
 
-        self.keys_slot_frame = ctk.CTkFrame(left)
+        self.keys_slot_frame = ctk.CTkFrame(left, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
         self.keys_slot_frame.pack(fill="y", expand=True)
 
         for index, slot_name in enumerate(BUTTON_SLOT_NAMES):
@@ -72,27 +72,28 @@ class KeyMappingTab:
                 self.keys_slot_frame,
                 textvariable=var,
                 width=220,
-                height=36,
+                height=40,
                 font=self.app.font_main,
                 fg_color="transparent",
                 border_width=1,
-                border_color="gray50",
+                border_color=("#d1d5db", "#2e3241"),
                 text_color=("gray10", "gray90"),
-                hover_color=("gray70", "gray30"),
+                hover_color=("#f3f4f6", "#2e3241"),
+                corner_radius=20,
                 command=lambda idx=index: self._select_slot(idx),
             )
-            btn.pack(fill="x", padx=10, pady=6)
+            btn.pack(fill="x", padx=15, pady=8)
             self.key_slot_vars.append(var)
             self.key_slot_buttons.append(btn)
 
         # ── 右上: 現在の割り当て ──
-        self.keys_current_frame = ctk.CTkFrame(right)
+        self.keys_current_frame = ctk.CTkFrame(right, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
         self.keys_current_frame.pack(fill="x", pady=(0, 15))
         
         inner_curr = ctk.CTkFrame(self.keys_current_frame, fg_color="transparent")
         inner_curr.pack(padx=20, pady=15, fill="x")
         
-        self.keys_current_title = ctk.CTkLabel(inner_curr, text="Current Assignment", font=self.app.font_heading, text_color="#2dd4bf")
+        self.keys_current_title = ctk.CTkLabel(inner_curr, text="Current Assignment", font=self.app.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
         self.keys_current_title.pack(anchor="w")
         
         ctk.CTkLabel(
@@ -110,13 +111,13 @@ class KeyMappingTab:
         self.keys_hint_label.pack(anchor="w")
 
         # ── 右中: プリセット ──
-        self.keys_presets_frame = ctk.CTkFrame(right)
+        self.keys_presets_frame = ctk.CTkFrame(right, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
         self.keys_presets_frame.pack(fill="both", expand=True, pady=(0, 15))
         
         inner_preset = ctk.CTkFrame(self.keys_presets_frame, fg_color="transparent")
         inner_preset.pack(fill="both", expand=True, padx=20, pady=15)
         
-        self.keys_presets_title = ctk.CTkLabel(inner_preset, text="Preset Assignments", font=self.app.font_heading, text_color="#2dd4bf")
+        self.keys_presets_title = ctk.CTkLabel(inner_preset, text="Preset Assignments", font=self.app.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
         self.keys_presets_title.pack(anchor="w", pady=(0, 10))
 
         self.keys_preset_tabview = ctk.CTkTabview(inner_preset, corner_radius=10)
@@ -145,13 +146,13 @@ class KeyMappingTab:
         lower.grid_columnconfigure((0, 1), weight=1)
 
         # 修飾キーフレーム
-        self.keys_modifier_frame = ctk.CTkFrame(lower)
+        self.keys_modifier_frame = ctk.CTkFrame(lower, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
         self.keys_modifier_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         
         inner_mod = ctk.CTkFrame(self.keys_modifier_frame, fg_color="transparent")
         inner_mod.pack(fill="both", expand=True, padx=15, pady=15)
         
-        self.keys_modifier_title = ctk.CTkLabel(inner_mod, text="Modifier Combo", font=self.app.font_heading, text_color="#2dd4bf")
+        self.keys_modifier_title = ctk.CTkLabel(inner_mod, text="Modifier Combo", font=self.app.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
         self.keys_modifier_title.pack(anchor="w", pady=(0, 10))
         
         mod_row = ctk.CTkFrame(inner_mod, fg_color="transparent")
@@ -175,14 +176,14 @@ class KeyMappingTab:
         self.modifier_capture_entry.bind("<KeyPress>", self._capture_modifier_key)
 
         # マクロアサインフレーム
-        self.keys_macro_frame = ctk.CTkFrame(lower)
+        self.keys_macro_frame = ctk.CTkFrame(lower, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
         self.keys_macro_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         
         inner_mac = ctk.CTkFrame(self.keys_macro_frame, fg_color="transparent")
         inner_mac.pack(fill="both", expand=True, padx=15, pady=15)
         inner_mac.grid_columnconfigure(1, weight=1)
 
-        self.keys_macro_title = ctk.CTkLabel(inner_mac, text="Macro Assignment", font=self.app.font_heading, text_color="#2dd4bf")
+        self.keys_macro_title = ctk.CTkLabel(inner_mac, text="Macro Assignment", font=self.app.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
         self.keys_macro_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
         self.key_macro_profile_label = ctk.CTkLabel(inner_mac, text="Macro Profile:", font=self.app.font_main)
@@ -223,8 +224,9 @@ class KeyMappingTab:
         self.reset_keys_btn = ctk.CTkButton(
             actions_frame, 
             text="Reset Key Mapping", 
-            font=self.app.font_button, 
-            fg_color="gray30", hover_color="gray40", text_color="white",
+            font=self.app.font_button,
+            corner_radius=20, height=36,
+            fg_color=("#d1d5db", "gray30"), hover_color=("#f3f4f6", "gray40"), text_color=("black", "white"),
             command=self._reset_key_mapping_on_device
         )
         self.reset_keys_btn.pack(side="right")
@@ -334,9 +336,9 @@ class KeyMappingTab:
         # Change active button style
         for i, btn in enumerate(self.key_slot_buttons):
             if i == index:
-                btn.configure(fg_color="#2dd4bf", text_color=("gray10", "gray10"), hover_color="#5eead4")
+                btn.configure(fg_color=("#0ea5a5", "#2dd4bf"), text_color="white", hover_color=("#0d8a8a", "#5eead4"))
             else:
-                btn.configure(fg_color="transparent", text_color=("gray10", "gray90"), hover_color=("gray70", "gray30"))
+                btn.configure(fg_color="transparent", text_color=("gray10", "gray90"), hover_color=("#e5e7eb", "#2e3241"))
         
         self.app._refresh_key_mapping_ui()
         self.app._refresh_dirty_state()
