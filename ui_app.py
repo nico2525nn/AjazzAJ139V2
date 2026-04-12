@@ -260,7 +260,7 @@ class AjazzApp(ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
 
         # ── サイドバー ──
-        self.sidebar_frame = ctk.CTkFrame(self, corner_radius=0, width=220)
+        self.sidebar_frame = ctk.CTkFrame(self, corner_radius=0, width=240, fg_color=("#e4e7ec", "#1a1d27"))
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(7, weight=1)
 
@@ -279,11 +279,11 @@ class AjazzApp(ctk.CTk):
         for i, (tab_id, lang_key) in enumerate(tabs_config):
             btn = ctk.CTkButton(
                 self.sidebar_frame, text="",
-                fg_color="transparent", text_color=["gray10", "gray90"], hover_color=["gray70", "gray30"],
-                anchor="w", font=self.font_button,
+                fg_color="transparent", text_color=["gray10", "gray90"], hover_color=["#d1d5db", "#2e3241"],
+                anchor="w", font=self.font_button, corner_radius=24, height=44,
                 command=lambda tid=tab_id: self._select_tab(tid)
             )
-            btn.grid(row=i+1, column=0, padx=15, pady=8, sticky="ew")
+            btn.grid(row=i+1, column=0, padx=20, pady=6, sticky="ew")
             self.sidebar_btns[tab_id] = {"btn": btn, "lang_key": lang_key}
 
         # ── サイドバー下部 (言語・テーマ設定) ──
@@ -340,14 +340,19 @@ class AjazzApp(ctk.CTk):
         self.page_status_label.pack(side=tk.LEFT)
         
         self.btn_save_page = ctk.CTkButton(
-            self.footer_frame, text="", font=self.font_button,
-            fg_color=PALETTES["dark"]["accent"], hover_color=PALETTES["dark"]["accent_light"], text_color=PALETTES["dark"]["accent_fg"],
-            command=self._save_current_page, height=36
+            self.footer_frame, text="", font=self.font_button, corner_radius=24,
+            fg_color=("#0ea5a5", "#2dd4bf"), hover_color=("#0d8a8a", "#5eead4"), text_color="white",
+            command=self._save_current_page, height=44, width=160
         )
         self.btn_save_page.pack(side=tk.RIGHT)
 
-        self.btn_refresh = ctk.CTkButton(self.footer_frame, text="", font=self.font_main, command=self._refresh_status, height=36)
-        self.btn_refresh.pack(side=tk.RIGHT, padx=10)
+        self.btn_refresh = ctk.CTkButton(
+            self.footer_frame, text="", font=self.font_button, corner_radius=24, 
+            fg_color=("#ffffff", "#21242f"), hover_color=("#f3f4f6", "#2e3241"), text_color=["gray10", "gray90"],
+            border_width=1, border_color=["#d1d5db", "#2e3241"],
+            command=self._refresh_status, height=44, width=140
+        )
+        self.btn_refresh.pack(side=tk.RIGHT, padx=15)
 
     def _select_tab(self, tab_id: str):
         # Guard changes
@@ -369,7 +374,7 @@ class AjazzApp(ctk.CTk):
         # Update button colors
         for t_id, data in self.sidebar_btns.items():
             if t_id == tab_id:
-                data["btn"].configure(fg_color=["gray70", "gray25"])
+                data["btn"].configure(fg_color=("#ffffff", "#21242f"))
             else:
                 data["btn"].configure(fg_color="transparent")
 
@@ -394,25 +399,25 @@ class AjazzApp(ctk.CTk):
         self.version_var = tk.StringVar()
         self.battery_var = tk.StringVar()
 
-        self.status_frame_inner = ctk.CTkFrame(f, corner_radius=15)
-        self.status_frame_inner.pack(fill="x", padx=20, pady=20)
+        self.status_frame_inner = ctk.CTkFrame(f, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
+        self.status_frame_inner.pack(fill="x", padx=40, pady=40)
         
-        self.status_frame_title = ctk.CTkLabel(self.status_frame_inner, text="USB / Dongle Status", font=self.font_heading, text_color="#2dd4bf")
-        self.status_frame_title.pack(anchor="w", padx=20, pady=(15, 15))
+        self.status_frame_title = ctk.CTkLabel(self.status_frame_inner, text="USB / Dongle Status", font=self.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
+        self.status_frame_title.pack(anchor="w", padx=30, pady=(20, 15))
 
-        ctk.CTkLabel(self.status_frame_inner, textvariable=self.status_var, font=self.font_main).pack(anchor="w", padx=20)
-        ctk.CTkLabel(self.status_frame_inner, textvariable=self.version_var, font=self.font_main).pack(anchor="w", padx=20, pady=(8, 0))
-        ctk.CTkLabel(self.status_frame_inner, textvariable=self.battery_var, font=self.font_main).pack(anchor="w", padx=20, pady=(8, 20))
+        ctk.CTkLabel(self.status_frame_inner, textvariable=self.status_var, font=self.font_main).pack(anchor="w", padx=30)
+        ctk.CTkLabel(self.status_frame_inner, textvariable=self.version_var, font=self.font_main).pack(anchor="w", padx=30, pady=(10, 0))
+        ctk.CTkLabel(self.status_frame_inner, textvariable=self.battery_var, font=self.font_main).pack(anchor="w", padx=30, pady=(10, 30))
 
     def _build_perf_tab(self):
         f = self.tabs["perf"]
         def row(parent):
             cf = ctk.CTkFrame(parent, fg_color="transparent")
-            cf.pack(fill="x", pady=6)
+            cf.pack(fill="x", pady=8)
             return cf
 
-        self.perf_frame = ctk.CTkFrame(f)
-        self.perf_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        self.perf_frame = ctk.CTkFrame(f, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
+        self.perf_frame.pack(fill="both", expand=True, padx=40, pady=40)
 
         r1 = row(self.perf_frame)
         self.lbl_poll = ctk.CTkLabel(r1, text="Polling Rate", font=self.font_main, width=180, anchor="w")
@@ -436,8 +441,8 @@ class AjazzApp(ctk.CTk):
         self.lod_combo.pack(side="left")
 
         # DPI 枠
-        self.dpi_label_title = ctk.CTkLabel(self.perf_frame, text="DPI Levels", font=self.font_heading, text_color="#2dd4bf")
-        self.dpi_label_title.pack(anchor="w", padx=20, pady=(20, 10))
+        self.dpi_label_title = ctk.CTkLabel(self.perf_frame, text="DPI Levels", font=self.font_heading, text_color=("#0ea5a5", "#2dd4bf"))
+        self.dpi_label_title.pack(anchor="w", padx=20, pady=(30, 20))
         
         self.dpi_lbls = []
         self.dpi_vars = []
@@ -464,11 +469,11 @@ class AjazzApp(ctk.CTk):
         f = self.tabs["sys"]
         def row(parent):
             cf = ctk.CTkFrame(parent, fg_color="transparent")
-            cf.pack(fill="x", pady=10)
+            cf.pack(fill="x", pady=12)
             return cf
 
-        self.sys_frame = ctk.CTkFrame(f)
-        self.sys_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        self.sys_frame = ctk.CTkFrame(f, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
+        self.sys_frame.pack(fill="both", expand=True, padx=40, pady=40)
 
         r1 = row(self.sys_frame)
         self.lbl_light = ctk.CTkLabel(r1, font=self.font_main, width=180, anchor="w")
@@ -492,11 +497,11 @@ class AjazzApp(ctk.CTk):
 
     def _build_debug_tab(self):
         f = self.tabs["debug"]
-        self.debug_frame = ctk.CTkFrame(f)
-        self.debug_frame.pack(fill="both", expand=True)
+        self.debug_frame = ctk.CTkFrame(f, corner_radius=16, fg_color=("#ffffff", "#21242f"), border_width=1, border_color=("#d1d5db", "#2e3241"))
+        self.debug_frame.pack(fill="both", expand=True, padx=40, pady=40)
         # CTkTextbox を使用することでスクロール可能なモダンテキストエリアに。
-        self.log_txt = ctk.CTkTextbox(self.debug_frame, font=self.font_main, state="disabled")
-        self.log_txt.pack(fill="both", expand=True, padx=10, pady=10)
+        self.log_txt = ctk.CTkTextbox(self.debug_frame, font=self.font_main, state="disabled", fg_color="transparent")
+        self.log_txt.pack(fill="both", expand=True, padx=15, pady=15)
 
     # ══════════════════════════════════════════════════════════════════
     # 言語・テーマ設定
@@ -605,7 +610,21 @@ class AjazzApp(ctk.CTk):
 
         save_key = {"perf": "save_perf", "sys": "save_sys", "keys": "save_keys", "macro": "save_macro"}.get(cur_page, "save_page")
         self.btn_save_page.configure(text=self._t(save_key))
-        self.btn_save_page.configure(state="normal" if cur_page in {"perf", "sys", "keys", "macro"} else "disabled")
+        if cur_page in {"perf", "sys", "keys", "macro"}:
+            self.btn_save_page.configure(
+                state="normal",
+                fg_color=("#0ea5a5", "#2dd4bf"),
+                text_color="white",
+                border_width=0
+            )
+        else:
+            self.btn_save_page.configure(
+                state="disabled",
+                fg_color="transparent",
+                text_color=("gray50", "gray40"),
+                border_width=1,
+                border_color=("#d1d5db", "#2e3241")
+            )
 
     # ══════════════════════════════════════════════════════════════════
     # (既存のスナップショット・保存ロジック等は変更なし、以下UI互換ラッパー)
@@ -883,11 +902,32 @@ class AjazzApp(ctk.CTk):
     def _set_busy(self, busy: bool):
         self._busy_count = max(0, self._busy_count + (1 if busy else -1))
         state = "disabled" if self._busy_count else "normal"
+        
+        def _update_btn(btn):
+            if not btn: return
+            if state == "disabled":
+                if not hasattr(btn, "_orig_opts"):
+                    btn._orig_opts = {
+                        "fg_color": btn.cget("fg_color"),
+                        "text_color": btn.cget("text_color"),
+                        "border_width": btn.cget("border_width"),
+                        "border_color": btn.cget("border_color")
+                    }
+                btn.configure(state="disabled", fg_color="transparent", text_color=("gray50", "gray40"), border_width=1, border_color=("#d1d5db", "#2e3241"))
+            else:
+                if hasattr(btn, "_orig_opts"):
+                    btn.configure(state="normal", **btn._orig_opts)
+                else:
+                    btn.configure(state="normal")
+                    
         for w in (self.btn_save_page, self.btn_refresh):
-            if w: w.configure(state=state)
+            _update_btn(w)
         for btn_name in ("reset_keys_btn", "record_btn", "add_key_pair_btn", "add_mouse_pair_btn", "macro_move_up_btn", "macro_move_down_btn", "macro_delete_btn", "macro_clear_btn", "reload_macro_btn", "reset_macro_btn"):
-            btn = getattr(self.macro_tab, btn_name, None) or getattr(self.km_tab, btn_name, None)
-            if btn: btn.configure(state=state)
+            btn = getattr(self.macro_tab, btn_name, None) if hasattr(self, "macro_tab") else None
+            _update_btn(btn)
+            btn_k = getattr(self.km_tab, btn_name, None) if hasattr(self, "km_tab") else None
+            _update_btn(btn_k)
+            
         self.configure(cursor="watch" if self._busy_count else "")
 
     def _run_in_background(self, worker, on_success=None, on_error=None, busy=True):

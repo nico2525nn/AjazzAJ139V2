@@ -391,7 +391,7 @@ PALETTES: dict[str, dict[str, str]] = {
         "accent": "#2dd4bf",
         "accent_light": "#5eead4",
         "accent_dark": "#14b8a6",
-        "accent_fg": "#0f1117",
+        "accent_fg": "#ffffff",
         "dirty": "#422006",
         "dirty_fg": "#fbbf24",
         "border": "#2e3241",
@@ -399,6 +399,6 @@ PALETTES: dict[str, dict[str, str]] = {
         "tab_selected": "#21242f",
         "heading": "#1a1d27",
         "select_bg": "#2dd4bf",
-        "select_fg": "#0f1117",
+        "select_fg": "#ffffff",
     },
 }
